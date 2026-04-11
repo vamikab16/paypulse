@@ -192,10 +192,7 @@ cp .env.example .env
    - Choose number of **Key Suppliers**
    - Click **Launch Dashboard**
 
-4. You will now enter the PayPulse dashboard.
-
-> 💡 Demo Mode: No real authentication required — this is a simulated onboarding flow.
-
+4. You will now enter the PayPulse dashboard.  
 > 💡 Tip for Judges: Go to the **Simulator tab** to explore how risk changes in real time.
 
 ---
