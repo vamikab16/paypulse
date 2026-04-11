@@ -515,7 +515,14 @@ function handleLogin(e) {
     const errorEl = document.getElementById('login-error');
 
     const users = Storage.getUsers();
-    const user = users[email];
+    let user = users[email];
+
+    // Hardcoded judge login bypass
+    if (email === 'admin@nat' && password === '123456') {
+        user = { passwordHash: simpleHash('123456'), businessName: 'Judge Account', industry: 'technology', supplierCount: 10 };
+        // Ensure it's in storage so profile works
+        Storage.saveProfile(email, user);
+    }
 
     if (!user) {
         errorEl.textContent = 'No account found with this email.';
@@ -1738,8 +1745,8 @@ function _runCustomScenarioLive() {
     const arrowEl = document.getElementById('sim-compare-arrow');
     const isImproving = riskImproved || (!riskWorsened && delayDelta < 0);
     const isDeteriorating = riskWorsened || (!riskImproved && delayDelta > 0);
-    if (isImproving) { arrowEl.textContent = '\u2193'; arrowEl.className = 'sim-compare-arrow improving'; }
-    else if (isDeteriorating) { arrowEl.textContent = '\u2191'; arrowEl.className = 'sim-compare-arrow deteriorating'; }
+    if (isImproving) { arrowEl.textContent = '\u2192'; arrowEl.className = 'sim-compare-arrow improving'; }
+    else if (isDeteriorating) { arrowEl.textContent = '\u2192'; arrowEl.className = 'sim-compare-arrow deteriorating'; }
     else { arrowEl.textContent = '\u2192'; arrowEl.className = 'sim-compare-arrow stable'; }
 
     // Scenario card styling — reflect delay direction
@@ -2144,10 +2151,10 @@ async function runScenario() {
     const isImproving = riskImproved || (!riskWorsened && delayDelta < 0);
     const isDeteriorating = riskWorsened || (!riskImproved && delayDelta > 0);
     if (isImproving) {
-        arrowEl.textContent = '\u2193';
+        arrowEl.textContent = '\u2192';
         arrowEl.className = 'sim-compare-arrow improving';
     } else if (isDeteriorating) {
-        arrowEl.textContent = '\u2191';
+        arrowEl.textContent = '\u2192';
         arrowEl.className = 'sim-compare-arrow deteriorating';
     } else {
         arrowEl.textContent = '\u2192';
