@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  🚀 <a href="YOUR_VERCEL_LINK_HERE"><strong>Live Demo on Vercel</strong></a> &nbsp;·&nbsp;
+  🚀 <a href="https://vamikab16.github.io/paypulse/public/index.html"><strong>Live Demo</strong></a> &nbsp;·&nbsp;
 </p>
 
 <p align="center">
@@ -181,7 +181,7 @@ cp .env.example .env
 ---
 ### Getting Started
 
-1. Open the Live Demo: https://paypulse-app-six.vercel.app/
+1. Open the Live Demo: https://vamikab16.github.io/paypulse/public/index.html
 
 2. Set up your business:
    - Enter your **Business Name**
