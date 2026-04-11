@@ -1659,40 +1659,68 @@ function _runCustomScenarioLive() {
     // Show result immediately (no spinner)
     resultEl.style.display = 'block';
 
-    // Parse projected risk from risk_delta
-    let projectedRisk = 'AMBER';
-    const dt = result.risk_delta || '';
-    if (dt.includes('\u2192') || dt.includes('→')) {
-        const after = dt.split(/\u2192|→/).pop().trim();
-        if (after.includes('RED')) projectedRisk = 'RED';
-        else if (after.includes('GREEN')) projectedRisk = 'GREEN';
-        else if (after.includes('AMBER')) projectedRisk = 'AMBER';
-    } else if (dt.includes('RED')) {
-        projectedRisk = 'RED';
-    } else if (dt.includes('GREEN')) {
-        projectedRisk = 'GREEN';
-    }
-
-    // Calculate scenario average delay
+    // ── Custom scenario: use targeted supplier's individual data for cards ──
     const supplierImpacts = result.supplier_impacts || [];
-    let scenarioAvgDelay = 0;
-    if (supplierImpacts.length > 0) {
-        scenarioAvgDelay = Math.round(supplierImpacts.reduce((acc, s) => acc + s.scenario_end, 0) / supplierImpacts.length);
+    const allSuppliers = (suppliersData && suppliersData.suppliers) || FALLBACK.suppliers.suppliers;
+    const targetSupplier = allSuppliers.find(s => s.supplier_id === supplierId);
+    const targetImpact = supplierImpacts.find(s => s.supplier_id === supplierId);
+
+    let currentRisk, currentAvg, projectedRisk, scenarioAvgDelay;
+    if (targetSupplier && targetImpact) {
+        currentAvg = Math.round(targetSupplier.current_delay);
+        currentRisk = AnalysisEngine.calculateRisk([currentAvg]);
+        scenarioAvgDelay = Math.round(targetImpact.scenario_end);
+        projectedRisk = AnalysisEngine.calculateRisk([scenarioAvgDelay]);
+    } else {
+        currentRisk = getCurrentRiskLevel();
+        currentAvg = getCurrentAvgDelay();
+        projectedRisk = 'AMBER';
+        const dt = result.risk_delta || '';
+        if (dt.includes('\u2192') || dt.includes('→')) {
+            const after = dt.split(/\u2192|→/).pop().trim();
+            if (after.includes('RED')) projectedRisk = 'RED';
+            else if (after.includes('GREEN')) projectedRisk = 'GREEN';
+        } else if (dt.includes('RED')) projectedRisk = 'RED';
+        else if (dt.includes('GREEN')) projectedRisk = 'GREEN';
+        scenarioAvgDelay = supplierImpacts.length > 0
+            ? Math.round(supplierImpacts.reduce((acc, s) => acc + s.scenario_end, 0) / supplierImpacts.length)
+            : 0;
     }
 
-    // Forecast range
+    // Forecast range — use targeted supplier's forecast
     const scenarioForecasts = result.scenario_forecast || {};
-    const allScenarioEnds = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
-    const forecastMin = Math.round(Math.min(...allScenarioEnds));
-    const forecastMax = Math.round(Math.max(...allScenarioEnds));
+    let forecastMin, forecastMax;
+    if (targetSupplier && scenarioForecasts[supplierId]) {
+        const sf = scenarioForecasts[supplierId];
+        forecastMin = Math.round(Math.min(...sf));
+        forecastMax = Math.round(Math.max(...sf));
+    } else {
+        const allScenarioEnds = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
+        forecastMin = Math.round(Math.min(...allScenarioEnds));
+        forecastMax = Math.round(Math.max(...allScenarioEnds));
+    }
 
     // Direction
-    const currentRisk = getCurrentRiskLevel();
-    const currentAvg = getCurrentAvgDelay();
-    const delayDelta = scenarioAvgDelay - currentAvg;
+    const delayDelta = Math.round(scenarioAvgDelay - currentAvg);
     const riskOrder = { GREEN: 0, AMBER: 1, RED: 2 };
     const riskImproved = riskOrder[projectedRisk] < riskOrder[currentRisk];
     const riskWorsened = riskOrder[projectedRisk] > riskOrder[currentRisk];
+
+    // Override intervention notification for targeted supplier
+    if (targetSupplier) {
+        const sName = targetSupplier.supplier_name;
+        if (riskWorsened) {
+            result.intervention_impact = { text: `${sName}: delay adjustment pushes risk from ${currentRisk} to ${projectedRisk}. Immediate action needed.`, type: 'negative', direction: 'deteriorating' };
+        } else if (riskImproved) {
+            result.intervention_impact = { text: `${sName}: delay reduction improves risk from ${currentRisk} to ${projectedRisk}. Continue this strategy.`, type: 'positive', direction: 'improving' };
+        } else if (delayDelta > 0) {
+            result.intervention_impact = { text: `${sName}: projected delay increases by ${delayDelta} days. Risk holds at ${currentRisk}. Monitor closely.`, type: 'neutral', direction: 'stable' };
+        } else if (delayDelta < 0) {
+            result.intervention_impact = { text: `${sName}: projected delay improves by ${Math.abs(delayDelta)} days. Risk holds at ${currentRisk}. Further reductions recommended.`, type: 'positive', direction: 'improving' };
+        } else {
+            result.intervention_impact = { text: `${sName}: no change in projected trajectory. Risk holds at ${currentRisk}.`, type: 'neutral', direction: 'stable' };
+        }
+    }
 
     // Update Current card
     const currentRiskEl = document.getElementById('sim-current-risk');
@@ -1706,15 +1734,17 @@ function _runCustomScenarioLive() {
     scenarioRiskEl.className = `sim-compare-value ${projectedRisk.toLowerCase()}`;
     document.getElementById('sim-scenario-avg').textContent = scenarioAvgDelay + 'd';
 
-    // Arrow
+    // Arrow — use delay delta direction (not just risk level change)
     const arrowEl = document.getElementById('sim-compare-arrow');
-    if (riskImproved) { arrowEl.textContent = '\u2193'; arrowEl.className = 'sim-compare-arrow improving'; }
-    else if (riskWorsened) { arrowEl.textContent = '\u2191'; arrowEl.className = 'sim-compare-arrow deteriorating'; }
+    const isImproving = riskImproved || (!riskWorsened && delayDelta < 0);
+    const isDeteriorating = riskWorsened || (!riskImproved && delayDelta > 0);
+    if (isImproving) { arrowEl.textContent = '\u2193'; arrowEl.className = 'sim-compare-arrow improving'; }
+    else if (isDeteriorating) { arrowEl.textContent = '\u2191'; arrowEl.className = 'sim-compare-arrow deteriorating'; }
     else { arrowEl.textContent = '\u2192'; arrowEl.className = 'sim-compare-arrow stable'; }
 
-    // Scenario card styling
+    // Scenario card styling — reflect delay direction
     const scenarioCard = document.getElementById('sim-compare-scenario-card');
-    scenarioCard.className = 'sim-compare-card scenario' + (riskImproved ? ' improving' : riskWorsened ? ' deteriorating' : '');
+    scenarioCard.className = 'sim-compare-card scenario' + (isImproving ? ' improving' : isDeteriorating ? ' deteriorating' : '');
 
     // Delta indicator
     const deltaEl = document.getElementById('sim-delay-delta');
@@ -1812,7 +1842,7 @@ function populateSupplierDropdown() {
 
     const suppliers = (suppliersData && suppliersData.suppliers) || FALLBACK.suppliers.suppliers;
     select.innerHTML = suppliers.map(s =>
-        `<option value="${s.supplier_id}">${s.supplier_name} (${s.current_delay}d delay)</option>`
+        `<option value="${s.supplier_id}">${s.supplier_name} (${Math.round(s.current_delay)}d delay)</option>`
     ).join('');
 }
 
@@ -2013,43 +2043,89 @@ async function runScenario() {
     btn.disabled = false;
     btn.textContent = 'Run Scenario';
 
-    // Parse projected risk from risk_delta
-    let projectedRisk = 'AMBER';
-    const dt = result.risk_delta || '';
-    if (dt.includes('\u2192') || dt.includes('→')) {
-        const after = dt.split(/\u2192|→/).pop().trim();
-        if (after.includes('RED')) projectedRisk = 'RED';
-        else if (after.includes('GREEN')) projectedRisk = 'GREEN';
-        else if (after.includes('AMBER')) projectedRisk = 'AMBER';
-    } else if (dt.includes('RED')) {
-        projectedRisk = 'RED';
-    } else if (dt.includes('GREEN')) {
-        projectedRisk = 'GREEN';
-    }
-
-    // Calculate scenario average delay from forecasts
+    // Parse scenario results — for custom, use targeted supplier's individual data
     const scenarioForecasts = result.scenario_forecast || {};
     const supplierImpacts = result.supplier_impacts || [];
-    let scenarioAvgDelay = 0;
-    if (supplierImpacts.length > 0) {
-        scenarioAvgDelay = Math.round(supplierImpacts.reduce((acc, s) => acc + s.scenario_end, 0) / supplierImpacts.length);
+    let projectedRisk, scenarioAvgDelay, forecastMin, forecastMax, currentRisk, currentAvg;
+
+    if (scenarioType === 'custom' && params.supplier_id) {
+        const allSuppliers = (suppliersData && suppliersData.suppliers) || FALLBACK.suppliers.suppliers;
+        const targetSupplier = allSuppliers.find(s => s.supplier_id === params.supplier_id);
+        const targetImpact = supplierImpacts.find(s => s.supplier_id === params.supplier_id);
+
+        if (targetSupplier && targetImpact) {
+            currentAvg = Math.round(targetSupplier.current_delay);
+            currentRisk = AnalysisEngine.calculateRisk([currentAvg]);
+            scenarioAvgDelay = Math.round(targetImpact.scenario_end);
+            projectedRisk = AnalysisEngine.calculateRisk([scenarioAvgDelay]);
+            if (scenarioForecasts[params.supplier_id]) {
+                const sf = scenarioForecasts[params.supplier_id];
+                forecastMin = Math.round(Math.min(...sf));
+                forecastMax = Math.round(Math.max(...sf));
+            } else {
+                const allEnds = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
+                forecastMin = Math.round(Math.min(...allEnds));
+                forecastMax = Math.round(Math.max(...allEnds));
+            }
+        } else {
+            currentRisk = getCurrentRiskLevel();
+            currentAvg = getCurrentAvgDelay();
+            projectedRisk = 'AMBER';
+            scenarioAvgDelay = 0;
+            forecastMin = 0;
+            forecastMax = 0;
+        }
     } else {
-        const allEndVals = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
-        scenarioAvgDelay = allEndVals.length > 0 ? Math.round(allEndVals.reduce((a, b) => a + b, 0) / allEndVals.length) : 0;
+        // Non-custom scenarios: use overall averages
+        projectedRisk = 'AMBER';
+        const dt = result.risk_delta || '';
+        if (dt.includes('\u2192') || dt.includes('→')) {
+            const after = dt.split(/\u2192|→/).pop().trim();
+            if (after.includes('RED')) projectedRisk = 'RED';
+            else if (after.includes('GREEN')) projectedRisk = 'GREEN';
+            else if (after.includes('AMBER')) projectedRisk = 'AMBER';
+        } else if (dt.includes('RED')) {
+            projectedRisk = 'RED';
+        } else if (dt.includes('GREEN')) {
+            projectedRisk = 'GREEN';
+        }
+        if (supplierImpacts.length > 0) {
+            scenarioAvgDelay = Math.round(supplierImpacts.reduce((acc, s) => acc + s.scenario_end, 0) / supplierImpacts.length);
+        } else {
+            const allEndVals = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
+            scenarioAvgDelay = allEndVals.length > 0 ? Math.round(allEndVals.reduce((a, b) => a + b, 0) / allEndVals.length) : 0;
+        }
+        const allScenarioEnds = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
+        forecastMin = Math.round(Math.min(...allScenarioEnds));
+        forecastMax = Math.round(Math.max(...allScenarioEnds));
+        currentRisk = getCurrentRiskLevel();
+        currentAvg = getCurrentAvgDelay();
     }
 
-    // Calculate forecast range
-    const allScenarioEnds = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
-    const forecastMin = Math.round(Math.min(...allScenarioEnds));
-    const forecastMax = Math.round(Math.max(...allScenarioEnds));
-
-    // Determine direction
-    const currentRisk = getCurrentRiskLevel();
-    const currentAvg = getCurrentAvgDelay();
-    const delayDelta = scenarioAvgDelay - currentAvg;
+    const delayDelta = Math.round(scenarioAvgDelay - currentAvg);
     const riskOrder = { GREEN: 0, AMBER: 1, RED: 2 };
     const riskImproved = riskOrder[projectedRisk] < riskOrder[currentRisk];
     const riskWorsened = riskOrder[projectedRisk] > riskOrder[currentRisk];
+
+    // Override intervention for custom scenario based on supplier-specific risk
+    if (scenarioType === 'custom' && params.supplier_id) {
+        const allSuppliers = (suppliersData && suppliersData.suppliers) || FALLBACK.suppliers.suppliers;
+        const ts = allSuppliers.find(s => s.supplier_id === params.supplier_id);
+        if (ts) {
+            const sName = ts.supplier_name;
+            if (riskWorsened) {
+                result.intervention_impact = { text: `${sName}: delay adjustment pushes risk from ${currentRisk} to ${projectedRisk}. Immediate action needed.`, type: 'negative', direction: 'deteriorating' };
+            } else if (riskImproved) {
+                result.intervention_impact = { text: `${sName}: delay reduction improves risk from ${currentRisk} to ${projectedRisk}. Continue this strategy.`, type: 'positive', direction: 'improving' };
+            } else if (delayDelta > 0) {
+                result.intervention_impact = { text: `${sName}: projected delay increases by ${delayDelta} days. Risk holds at ${currentRisk}. Monitor closely.`, type: 'neutral', direction: 'stable' };
+            } else if (delayDelta < 0) {
+                result.intervention_impact = { text: `${sName}: projected delay improves by ${Math.abs(delayDelta)} days. Risk holds at ${currentRisk}. Further reductions recommended.`, type: 'positive', direction: 'improving' };
+            } else {
+                result.intervention_impact = { text: `${sName}: no change in projected trajectory. Risk holds at ${currentRisk}.`, type: 'neutral', direction: 'stable' };
+            }
+        }
+    }
 
     // Populate CURRENT card
     const currentRiskEl = document.getElementById('sim-current-risk');
@@ -2063,12 +2139,14 @@ async function runScenario() {
     scenarioRiskEl.className = `sim-compare-value ${projectedRisk.toLowerCase()}`;
     document.getElementById('sim-scenario-avg').textContent = scenarioAvgDelay + 'd';
 
-    // Direction arrow between cards
+    // Direction arrow — use delay delta direction (not just risk level change)
     const arrowEl = document.getElementById('sim-compare-arrow');
-    if (riskImproved) {
+    const isImproving = riskImproved || (!riskWorsened && delayDelta < 0);
+    const isDeteriorating = riskWorsened || (!riskImproved && delayDelta > 0);
+    if (isImproving) {
         arrowEl.textContent = '\u2193';
         arrowEl.className = 'sim-compare-arrow improving';
-    } else if (riskWorsened) {
+    } else if (isDeteriorating) {
         arrowEl.textContent = '\u2191';
         arrowEl.className = 'sim-compare-arrow deteriorating';
     } else {
@@ -2076,9 +2154,9 @@ async function runScenario() {
         arrowEl.className = 'sim-compare-arrow stable';
     }
 
-    // Scenario card border color based on direction
+    // Scenario card border color — reflect delay direction
     const scenarioCard = document.getElementById('sim-compare-scenario-card');
-    scenarioCard.className = 'sim-compare-card scenario' + (riskImproved ? ' improving' : riskWorsened ? ' deteriorating' : '');
+    scenarioCard.className = 'sim-compare-card scenario' + (isImproving ? ' improving' : isDeteriorating ? ' deteriorating' : '');
 
     // Delay delta indicator
     const deltaEl = document.getElementById('sim-delay-delta');
