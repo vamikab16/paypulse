@@ -323,7 +323,8 @@ This isn't a prototype — it's a fully functional dual-perspective dashboard wi
 
 ## 👥 Team
 
-**Code for Purpose India — NatWest Hackathon 2026**
+**ByteHER - Vamika Bhardwaj, Anshika**  
+**Indira Gandhi Delhi Technical University For Women**
 
 ---
 
