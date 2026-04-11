@@ -1625,6 +1625,139 @@ function renderBankTrendChart() {
 //  SCENARIO SIMULATOR
 // ══════════════════════════════════════
 
+// Debounce timer for live custom scenario updates
+let _customScenarioDebounce = null;
+
+function _scheduleCustomScenarioUpdate() {
+    const scenarioSelect = document.getElementById('scenario-select');
+    if (!scenarioSelect || scenarioSelect.value !== 'custom') return;
+    clearTimeout(_customScenarioDebounce);
+    _customScenarioDebounce = setTimeout(() => {
+        _runCustomScenarioLive();
+    }, 150);
+}
+
+/**
+ * Lightweight live-update for custom scenario — skips API call,
+ * computes locally, and updates the results panel without a loading spinner.
+ */
+function _runCustomScenarioLive() {
+    const scenarioType = document.getElementById('scenario-select').value;
+    if (scenarioType !== 'custom') return;
+
+    const resultEl = document.getElementById('sim-result');
+    const summaryEl = document.getElementById('sim-summary');
+    const explanationEl = document.getElementById('sim-explanation');
+
+    const supplierId = document.getElementById('scenario-supplier-select').value;
+    const adjustment = parseInt(document.getElementById('scenario-delay-slider').value);
+    const params = { supplier_id: supplierId, adjustment };
+
+    // Compute locally (instant)
+    const result = computeLocalScenario('custom', params);
+
+    // Show result immediately (no spinner)
+    resultEl.style.display = 'block';
+
+    // Parse projected risk from risk_delta
+    let projectedRisk = 'AMBER';
+    const dt = result.risk_delta || '';
+    if (dt.includes('\u2192') || dt.includes('→')) {
+        const after = dt.split(/\u2192|→/).pop().trim();
+        if (after.includes('RED')) projectedRisk = 'RED';
+        else if (after.includes('GREEN')) projectedRisk = 'GREEN';
+        else if (after.includes('AMBER')) projectedRisk = 'AMBER';
+    } else if (dt.includes('RED')) {
+        projectedRisk = 'RED';
+    } else if (dt.includes('GREEN')) {
+        projectedRisk = 'GREEN';
+    }
+
+    // Calculate scenario average delay
+    const supplierImpacts = result.supplier_impacts || [];
+    let scenarioAvgDelay = 0;
+    if (supplierImpacts.length > 0) {
+        scenarioAvgDelay = Math.round(supplierImpacts.reduce((acc, s) => acc + s.scenario_end, 0) / supplierImpacts.length);
+    }
+
+    // Forecast range
+    const scenarioForecasts = result.scenario_forecast || {};
+    const allScenarioEnds = Object.values(scenarioForecasts).map(arr => arr[arr.length - 1] || 0);
+    const forecastMin = Math.round(Math.min(...allScenarioEnds));
+    const forecastMax = Math.round(Math.max(...allScenarioEnds));
+
+    // Direction
+    const currentRisk = getCurrentRiskLevel();
+    const currentAvg = getCurrentAvgDelay();
+    const delayDelta = scenarioAvgDelay - currentAvg;
+    const riskOrder = { GREEN: 0, AMBER: 1, RED: 2 };
+    const riskImproved = riskOrder[projectedRisk] < riskOrder[currentRisk];
+    const riskWorsened = riskOrder[projectedRisk] > riskOrder[currentRisk];
+
+    // Update Current card
+    const currentRiskEl = document.getElementById('sim-current-risk');
+    currentRiskEl.textContent = currentRisk;
+    currentRiskEl.className = `sim-compare-value ${currentRisk.toLowerCase()}`;
+    document.getElementById('sim-current-avg').textContent = currentAvg + 'd';
+
+    // Update Scenario card
+    const scenarioRiskEl = document.getElementById('sim-scenario-risk');
+    scenarioRiskEl.textContent = projectedRisk;
+    scenarioRiskEl.className = `sim-compare-value ${projectedRisk.toLowerCase()}`;
+    document.getElementById('sim-scenario-avg').textContent = scenarioAvgDelay + 'd';
+
+    // Arrow
+    const arrowEl = document.getElementById('sim-compare-arrow');
+    if (riskImproved) { arrowEl.textContent = '\u2193'; arrowEl.className = 'sim-compare-arrow improving'; }
+    else if (riskWorsened) { arrowEl.textContent = '\u2191'; arrowEl.className = 'sim-compare-arrow deteriorating'; }
+    else { arrowEl.textContent = '\u2192'; arrowEl.className = 'sim-compare-arrow stable'; }
+
+    // Scenario card styling
+    const scenarioCard = document.getElementById('sim-compare-scenario-card');
+    scenarioCard.className = 'sim-compare-card scenario' + (riskImproved ? ' improving' : riskWorsened ? ' deteriorating' : '');
+
+    // Delta indicator
+    const deltaEl = document.getElementById('sim-delay-delta');
+    if (delayDelta !== 0) {
+        const arrow = delayDelta > 0 ? '\u2191' : '\u2193';
+        const cls = delayDelta > 0 ? 'worse' : 'better';
+        deltaEl.textContent = `${arrow}${Math.abs(delayDelta)}d`;
+        deltaEl.className = `sim-compare-delta ${cls}`;
+    } else {
+        deltaEl.textContent = '';
+    }
+
+    // Forecast range
+    const forecastRangeEl = document.getElementById('sim-forecast-range');
+    const forecastValueEl = document.getElementById('sim-forecast-value');
+    if (forecastMin > 0) {
+        forecastRangeEl.style.display = 'flex';
+        forecastValueEl.textContent = forecastMin === forecastMax ? `${forecastMin} days` : `${forecastMin}\u2013${forecastMax} days`;
+    }
+
+    // Intervention
+    const interventionEl = document.getElementById('sim-intervention');
+    const interventionIcon = document.getElementById('sim-intervention-icon');
+    const interventionText = document.getElementById('sim-intervention-text');
+    const intervention = result.intervention_impact;
+    if (intervention && intervention.text) {
+        interventionEl.style.display = 'flex';
+        interventionEl.className = `sim-intervention ${intervention.type || 'neutral'}`;
+        interventionIcon.textContent = intervention.type === 'positive' ? '\u2713' : intervention.type === 'negative' ? '\u26A0' : '\u2014';
+        interventionText.textContent = intervention.text;
+    } else {
+        interventionEl.style.display = 'none';
+    }
+
+    // Summary & explanation
+    summaryEl.textContent = result.comparison_summary;
+    const explanation = generateScenarioExplanation('custom', params, result, projectedRisk, currentRisk, delayDelta);
+    explanationEl.textContent = explanation;
+
+    // Chart
+    renderScenarioChart(result);
+}
+
 function setupScenarioListeners() {
     const btn = document.getElementById('run-scenario-btn');
     if (btn) btn.addEventListener('click', runScenario);
@@ -1640,10 +1773,15 @@ function setupScenarioListeners() {
             // Hide previous results when scenario changes
             const resultEl = document.getElementById('sim-result');
             if (resultEl) resultEl.style.display = 'none';
+
+            // Auto-run when switching to custom (shows immediate preview)
+            if (scenarioSelect.value === 'custom') {
+                _scheduleCustomScenarioUpdate();
+            }
         });
     }
 
-    // Delay slider value display
+    // Delay slider — live update display + auto-run scenario
     const slider = document.getElementById('scenario-delay-slider');
     const sliderValue = document.getElementById('scenario-delay-value');
     if (slider && sliderValue) {
@@ -1651,6 +1789,16 @@ function setupScenarioListeners() {
             const v = parseInt(slider.value);
             sliderValue.textContent = (v >= 0 ? '+' : '') + v + ' days';
             sliderValue.className = 'sim-slider-value' + (v > 10 ? ' high' : v > 0 ? ' medium' : ' low');
+            // Live update scenario results as slider moves
+            _scheduleCustomScenarioUpdate();
+        });
+    }
+
+    // Supplier dropdown — auto-run scenario when supplier changes
+    const supplierSelect = document.getElementById('scenario-supplier-select');
+    if (supplierSelect) {
+        supplierSelect.addEventListener('change', () => {
+            _scheduleCustomScenarioUpdate();
         });
     }
 
