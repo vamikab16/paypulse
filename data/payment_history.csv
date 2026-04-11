@@ -1,0 +1,261 @@
+week_number,date,supplier_id,supplier_name,invoice_amount,payment_delay_days,historical_average_delay,contractual_terms_days,payment_status
+1,2024-01-01,S1,AlphaSteel Corp,23585.98,16.3,16.3,15,slightly_late
+1,2024-01-01,S2,BetaLogistics Ltd,13088.96,19.9,19.9,21,on_time
+1,2024-01-01,S3,GammaSupplies Co,5827.66,11.2,11.2,14,on_time
+1,2024-01-01,S4,DeltaParts Inc,6309.95,17.9,17.9,21,on_time
+1,2024-01-01,S5,EpsilonServices,4316.31,9.4,9.4,7,slightly_late
+2,2024-01-08,S1,AlphaSteel Corp,24756.22,15.2,15.8,15,slightly_late
+2,2024-01-08,S2,BetaLogistics Ltd,8754.19,20.3,20.1,21,on_time
+2,2024-01-08,S3,GammaSupplies Co,5577.45,11.0,11.1,14,on_time
+2,2024-01-08,S4,DeltaParts Inc,10808.89,16.2,17.0,21,on_time
+2,2024-01-08,S5,EpsilonServices,4063.0,6.5,8.0,7,on_time
+3,2024-01-15,S1,AlphaSteel Corp,16281.14,16.8,16.1,15,slightly_late
+3,2024-01-15,S2,BetaLogistics Ltd,9611.5,19.9,20.0,21,on_time
+3,2024-01-15,S3,GammaSupplies Co,5873.21,9.9,10.7,14,on_time
+3,2024-01-15,S4,DeltaParts Inc,11096.45,16.9,17.0,21,on_time
+3,2024-01-15,S5,EpsilonServices,3163.53,5.6,7.2,7,on_time
+4,2024-01-22,S1,AlphaSteel Corp,24267.65,16.5,16.2,15,slightly_late
+4,2024-01-22,S2,BetaLogistics Ltd,11883.97,19.7,19.9,21,on_time
+4,2024-01-22,S3,GammaSupplies Co,8403.57,10.6,10.7,14,on_time
+4,2024-01-22,S4,DeltaParts Inc,10805.78,18.0,17.2,21,on_time
+4,2024-01-22,S5,EpsilonServices,2032.18,7.3,7.2,7,slightly_late
+5,2024-01-29,S1,AlphaSteel Corp,19434.14,17.5,16.5,15,slightly_late
+5,2024-01-29,S2,BetaLogistics Ltd,13808.53,23.0,20.6,21,slightly_late
+5,2024-01-29,S3,GammaSupplies Co,7522.63,11.9,10.9,14,on_time
+5,2024-01-29,S4,DeltaParts Inc,10632.65,18.6,17.5,21,on_time
+5,2024-01-29,S5,EpsilonServices,3575.26,8.1,7.4,7,slightly_late
+6,2024-02-05,S1,AlphaSteel Corp,15638.17,15.2,16.2,15,slightly_late
+6,2024-02-05,S2,BetaLogistics Ltd,10219.97,21.9,20.8,21,slightly_late
+6,2024-02-05,S3,GammaSupplies Co,5217.38,12.9,11.2,14,on_time
+6,2024-02-05,S4,DeltaParts Inc,11027.88,20.1,17.9,21,on_time
+6,2024-02-05,S5,EpsilonServices,2497.72,8.0,7.5,7,slightly_late
+7,2024-02-12,S1,AlphaSteel Corp,22580.88,17.3,16.4,15,slightly_late
+7,2024-02-12,S2,BetaLogistics Ltd,10036.42,22.2,21.0,21,slightly_late
+7,2024-02-12,S3,GammaSupplies Co,6246.94,13.0,11.5,14,on_time
+7,2024-02-12,S4,DeltaParts Inc,6749.54,19.2,18.1,21,on_time
+7,2024-02-12,S5,EpsilonServices,4967.4,8.3,7.6,7,slightly_late
+8,2024-02-19,S1,AlphaSteel Corp,23931.21,16.4,16.4,15,slightly_late
+8,2024-02-19,S2,BetaLogistics Ltd,9791.76,21.3,21.0,21,slightly_late
+8,2024-02-19,S3,GammaSupplies Co,5246.27,12.6,11.6,14,on_time
+8,2024-02-19,S4,DeltaParts Inc,10471.13,19.4,18.3,21,on_time
+8,2024-02-19,S5,EpsilonServices,4517.21,6.5,7.5,7,on_time
+9,2024-02-26,S1,AlphaSteel Corp,19667.21,16.8,16.5,15,slightly_late
+9,2024-02-26,S2,BetaLogistics Ltd,9152.25,21.0,21.2,21,on_time
+9,2024-02-26,S3,GammaSupplies Co,5508.36,11.7,11.7,14,on_time
+9,2024-02-26,S4,DeltaParts Inc,11106.79,19.8,18.5,21,on_time
+9,2024-02-26,S5,EpsilonServices,2424.79,8.9,7.4,7,slightly_late
+10,2024-03-04,S1,AlphaSteel Corp,21830.49,14.5,16.4,15,on_time
+10,2024-03-04,S2,BetaLogistics Ltd,11045.68,21.4,21.3,21,slightly_late
+10,2024-03-04,S3,GammaSupplies Co,9624.21,13.5,12.0,14,on_time
+10,2024-03-04,S4,DeltaParts Inc,10407.73,19.3,18.9,21,on_time
+10,2024-03-04,S5,EpsilonServices,3177.72,9.0,7.7,7,slightly_late
+11,2024-03-11,S1,AlphaSteel Corp,18258.25,16.7,16.4,15,slightly_late
+11,2024-03-11,S2,BetaLogistics Ltd,14241.74,20.8,21.4,21,on_time
+11,2024-03-11,S3,GammaSupplies Co,9513.27,11.1,12.2,14,on_time
+11,2024-03-11,S4,DeltaParts Inc,7624.55,19.2,19.2,21,on_time
+11,2024-03-11,S5,EpsilonServices,4265.99,9.1,8.2,7,slightly_late
+12,2024-03-18,S1,AlphaSteel Corp,16894.71,16.0,16.3,15,slightly_late
+12,2024-03-18,S2,BetaLogistics Ltd,14235.55,23.9,21.9,21,slightly_late
+12,2024-03-18,S3,GammaSupplies Co,8897.39,13.5,12.5,14,on_time
+12,2024-03-18,S4,DeltaParts Inc,11881.23,21.1,19.6,21,slightly_late
+12,2024-03-18,S5,EpsilonServices,3407.98,8.0,8.2,7,slightly_late
+13,2024-03-25,S1,AlphaSteel Corp,17269.09,13.8,15.8,15,on_time
+13,2024-03-25,S2,BetaLogistics Ltd,11632.01,22.4,21.9,21,slightly_late
+13,2024-03-25,S3,GammaSupplies Co,5672.76,12.3,12.6,14,on_time
+13,2024-03-25,S4,DeltaParts Inc,6327.0,19.1,19.6,21,on_time
+13,2024-03-25,S5,EpsilonServices,2542.78,7.5,8.2,7,slightly_late
+14,2024-04-01,S1,AlphaSteel Corp,23326.78,17.3,16.1,15,slightly_late
+14,2024-04-01,S2,BetaLogistics Ltd,13404.09,24.0,22.1,21,slightly_late
+14,2024-04-01,S3,GammaSupplies Co,9287.86,12.3,12.5,14,on_time
+14,2024-04-01,S4,DeltaParts Inc,6254.1,19.7,19.6,21,on_time
+14,2024-04-01,S5,EpsilonServices,2133.95,7.4,8.1,7,slightly_late
+15,2024-04-08,S1,AlphaSteel Corp,23322.6,17.2,16.1,15,slightly_late
+15,2024-04-08,S2,BetaLogistics Ltd,10615.6,22.5,22.2,21,slightly_late
+15,2024-04-08,S3,GammaSupplies Co,8197.82,11.7,12.3,14,on_time
+15,2024-04-08,S4,DeltaParts Inc,10257.47,20.8,19.8,21,on_time
+15,2024-04-08,S5,EpsilonServices,2876.18,6.4,7.8,7,on_time
+16,2024-04-15,S1,AlphaSteel Corp,17883.28,17.3,16.2,15,slightly_late
+16,2024-04-15,S2,BetaLogistics Ltd,13227.53,23.6,22.4,21,slightly_late
+16,2024-04-15,S3,GammaSupplies Co,7389.39,10.8,12.1,14,on_time
+16,2024-04-15,S4,DeltaParts Inc,6550.33,22.1,20.1,21,slightly_late
+16,2024-04-15,S5,EpsilonServices,3759.34,7.5,8.0,7,slightly_late
+17,2024-04-22,S1,AlphaSteel Corp,16999.08,16.9,16.2,15,slightly_late
+17,2024-04-22,S2,BetaLogistics Ltd,14557.69,23.6,22.8,21,slightly_late
+17,2024-04-22,S3,GammaSupplies Co,6837.56,13.0,12.3,14,on_time
+17,2024-04-22,S4,DeltaParts Inc,11880.16,20.8,20.3,21,on_time
+17,2024-04-22,S5,EpsilonServices,2252.35,5.7,7.6,7,on_time
+18,2024-04-29,S1,AlphaSteel Corp,21648.51,14.3,16.2,15,on_time
+18,2024-04-29,S2,BetaLogistics Ltd,8859.31,22.2,22.9,21,slightly_late
+18,2024-04-29,S3,GammaSupplies Co,6897.32,11.2,12.0,14,on_time
+18,2024-04-29,S4,DeltaParts Inc,10704.49,20.9,20.5,21,on_time
+18,2024-04-29,S5,EpsilonServices,4530.77,6.5,7.3,7,on_time
+19,2024-05-06,S1,AlphaSteel Corp,19589.16,16.6,16.2,15,slightly_late
+19,2024-05-06,S2,BetaLogistics Ltd,9072.99,25.5,23.5,21,slightly_late
+19,2024-05-06,S3,GammaSupplies Co,9744.29,12.5,12.2,14,on_time
+19,2024-05-06,S4,DeltaParts Inc,9434.48,21.6,20.8,21,slightly_late
+19,2024-05-06,S5,EpsilonServices,3947.45,8.5,7.2,7,slightly_late
+20,2024-05-13,S1,AlphaSteel Corp,16145.3,16.1,16.2,15,slightly_late
+20,2024-05-13,S2,BetaLogistics Ltd,12195.68,23.6,23.4,21,slightly_late
+20,2024-05-13,S3,GammaSupplies Co,6641.81,15.1,12.4,14,slightly_late
+20,2024-05-13,S4,DeltaParts Inc,11676.15,22.4,20.9,21,slightly_late
+20,2024-05-13,S5,EpsilonServices,4288.71,8.0,7.2,7,slightly_late
+21,2024-05-20,S1,AlphaSteel Corp,20652.36,17.4,16.6,15,slightly_late
+21,2024-05-20,S2,BetaLogistics Ltd,10172.27,22.9,23.5,21,slightly_late
+21,2024-05-20,S3,GammaSupplies Co,8262.94,13.5,12.5,14,on_time
+21,2024-05-20,S4,DeltaParts Inc,9468.1,21.7,21.2,21,slightly_late
+21,2024-05-20,S5,EpsilonServices,3099.83,8.6,7.3,7,slightly_late
+22,2024-05-27,S1,AlphaSteel Corp,20535.79,17.2,16.6,15,slightly_late
+22,2024-05-27,S2,BetaLogistics Ltd,14802.78,25.2,23.6,21,slightly_late
+22,2024-05-27,S3,GammaSupplies Co,8164.59,13.0,12.6,14,on_time
+22,2024-05-27,S4,DeltaParts Inc,9895.4,23.5,21.7,21,slightly_late
+22,2024-05-27,S5,EpsilonServices,3015.37,9.1,7.5,7,slightly_late
+23,2024-06-03,S1,AlphaSteel Corp,15308.18,16.9,16.6,15,slightly_late
+23,2024-06-03,S2,BetaLogistics Ltd,9007.28,25.1,24.0,21,slightly_late
+23,2024-06-03,S3,GammaSupplies Co,6012.02,11.9,12.6,14,on_time
+23,2024-06-03,S4,DeltaParts Inc,6890.63,24.0,22.1,21,slightly_late
+23,2024-06-03,S5,EpsilonServices,3447.72,8.9,7.9,7,slightly_late
+24,2024-06-10,S1,AlphaSteel Corp,19085.29,16.4,16.5,15,slightly_late
+24,2024-06-10,S2,BetaLogistics Ltd,9607.59,26.1,24.3,21,late
+24,2024-06-10,S3,GammaSupplies Co,8071.9,12.6,12.9,14,on_time
+24,2024-06-10,S4,DeltaParts Inc,8424.21,23.2,22.3,21,slightly_late
+24,2024-06-10,S5,EpsilonServices,4556.05,8.9,8.0,7,slightly_late
+25,2024-06-17,S1,AlphaSteel Corp,15583.03,16.5,16.4,15,slightly_late
+25,2024-06-17,S2,BetaLogistics Ltd,12743.61,26.4,24.6,21,late
+25,2024-06-17,S3,GammaSupplies Co,5422.47,11.8,12.7,14,on_time
+25,2024-06-17,S4,DeltaParts Inc,6715.31,25.7,22.9,21,slightly_late
+25,2024-06-17,S5,EpsilonServices,4728.66,8.5,8.4,7,slightly_late
+26,2024-06-24,S1,AlphaSteel Corp,21619.17,15.2,16.5,15,slightly_late
+26,2024-06-24,S2,BetaLogistics Ltd,11544.31,24.8,25.0,21,slightly_late
+26,2024-06-24,S3,GammaSupplies Co,9794.4,13.7,13.0,14,on_time
+26,2024-06-24,S4,DeltaParts Inc,7668.45,24.2,23.3,21,slightly_late
+26,2024-06-24,S5,EpsilonServices,4550.82,8.0,8.6,7,slightly_late
+27,2024-07-01,S1,AlphaSteel Corp,21643.14,16.4,16.5,15,slightly_late
+27,2024-07-01,S2,BetaLogistics Ltd,12067.82,26.6,25.1,21,late
+27,2024-07-01,S3,GammaSupplies Co,8913.12,14.4,13.2,14,slightly_late
+27,2024-07-01,S4,DeltaParts Inc,8567.42,25.6,23.8,21,slightly_late
+27,2024-07-01,S5,EpsilonServices,3496.45,7.5,8.4,7,slightly_late
+28,2024-07-08,S1,AlphaSteel Corp,16669.73,16.0,16.5,15,slightly_late
+28,2024-07-08,S2,BetaLogistics Ltd,13628.87,27.1,25.5,21,late
+28,2024-07-08,S3,GammaSupplies Co,6266.92,12.4,12.9,14,on_time
+28,2024-07-08,S4,DeltaParts Inc,9807.77,25.3,24.2,21,slightly_late
+28,2024-07-08,S5,EpsilonServices,2314.94,8.3,8.5,7,slightly_late
+29,2024-07-15,S1,AlphaSteel Corp,22223.59,13.8,16.1,15,on_time
+29,2024-07-15,S2,BetaLogistics Ltd,13172.89,29.5,26.4,21,late
+29,2024-07-15,S3,GammaSupplies Co,8080.83,11.8,12.7,14,on_time
+29,2024-07-15,S4,DeltaParts Inc,8452.7,25.7,24.7,21,slightly_late
+29,2024-07-15,S5,EpsilonServices,4752.01,8.8,8.5,7,slightly_late
+30,2024-07-22,S1,AlphaSteel Corp,20010.45,15.5,15.8,15,slightly_late
+30,2024-07-22,S2,BetaLogistics Ltd,8866.28,29.2,26.8,21,late
+30,2024-07-22,S3,GammaSupplies Co,7862.15,11.6,12.5,14,on_time
+30,2024-07-22,S4,DeltaParts Inc,9529.84,24.3,24.8,21,slightly_late
+30,2024-07-22,S5,EpsilonServices,2532.52,9.0,8.5,7,slightly_late
+31,2024-07-29,S1,AlphaSteel Corp,19461.56,15.0,15.6,15,on_time
+31,2024-07-29,S2,BetaLogistics Ltd,10783.05,30.2,27.5,21,late
+31,2024-07-29,S3,GammaSupplies Co,8819.62,12.1,12.5,14,on_time
+31,2024-07-29,S4,DeltaParts Inc,6216.36,25.2,24.9,21,slightly_late
+31,2024-07-29,S5,EpsilonServices,2574.81,9.9,8.6,7,slightly_late
+32,2024-08-05,S1,AlphaSteel Corp,21302.83,15.2,15.4,15,slightly_late
+32,2024-08-05,S2,BetaLogistics Ltd,11420.09,30.0,28.0,21,late
+32,2024-08-05,S3,GammaSupplies Co,7997.97,14.5,12.8,14,slightly_late
+32,2024-08-05,S4,DeltaParts Inc,8844.8,26.4,25.3,21,late
+32,2024-08-05,S5,EpsilonServices,4782.38,9.0,8.6,7,slightly_late
+33,2024-08-12,S1,AlphaSteel Corp,16180.06,14.3,15.2,15,on_time
+33,2024-08-12,S2,BetaLogistics Ltd,14689.36,31.4,28.6,21,late
+33,2024-08-12,S3,GammaSupplies Co,5585.52,14.2,13.1,14,slightly_late
+33,2024-08-12,S4,DeltaParts Inc,9434.75,28.2,25.6,21,late
+33,2024-08-12,S5,EpsilonServices,2922.61,9.7,8.8,7,slightly_late
+34,2024-08-19,S1,AlphaSteel Corp,21997.07,18.2,15.6,15,slightly_late
+34,2024-08-19,S2,BetaLogistics Ltd,14473.66,31.3,29.4,21,late
+34,2024-08-19,S3,GammaSupplies Co,7093.04,10.6,12.7,14,on_time
+34,2024-08-19,S4,DeltaParts Inc,10212.01,27.9,26.1,21,late
+34,2024-08-19,S5,EpsilonServices,2021.94,7.8,8.8,7,slightly_late
+35,2024-08-26,S1,AlphaSteel Corp,22787.51,16.1,15.5,15,slightly_late
+35,2024-08-26,S2,BetaLogistics Ltd,11886.39,31.8,30.1,21,late
+35,2024-08-26,S3,GammaSupplies Co,6668.19,13.7,12.6,14,on_time
+35,2024-08-26,S4,DeltaParts Inc,9914.6,27.7,26.3,21,late
+35,2024-08-26,S5,EpsilonServices,4109.1,9.6,9.0,7,slightly_late
+36,2024-09-02,S1,AlphaSteel Corp,17722.42,16.1,15.5,15,slightly_late
+36,2024-09-02,S2,BetaLogistics Ltd,8741.28,32.2,30.7,21,late
+36,2024-09-02,S3,GammaSupplies Co,6352.67,34.2,15.3,14,critical
+36,2024-09-02,S4,DeltaParts Inc,10724.59,28.6,26.7,21,late
+36,2024-09-02,S5,EpsilonServices,4945.42,9.6,9.2,7,slightly_late
+37,2024-09-09,S1,AlphaSteel Corp,19557.76,14.1,15.6,15,on_time
+37,2024-09-09,S2,BetaLogistics Ltd,10933.8,33.5,31.2,21,late
+37,2024-09-09,S3,GammaSupplies Co,5788.06,28.5,17.4,14,late
+37,2024-09-09,S4,DeltaParts Inc,8588.51,30.2,27.3,21,late
+37,2024-09-09,S5,EpsilonServices,3432.52,10.8,9.4,7,slightly_late
+38,2024-09-16,S1,AlphaSteel Corp,20792.2,15.2,15.5,15,slightly_late
+38,2024-09-16,S2,BetaLogistics Ltd,12172.3,37.4,32.2,21,critical
+38,2024-09-16,S3,GammaSupplies Co,7189.52,27.3,19.4,14,late
+38,2024-09-16,S4,DeltaParts Inc,8163.94,30.2,28.0,21,late
+38,2024-09-16,S5,EpsilonServices,4709.98,9.3,9.5,7,slightly_late
+39,2024-09-23,S1,AlphaSteel Corp,22585.2,13.6,15.3,15,on_time
+39,2024-09-23,S2,BetaLogistics Ltd,13630.53,35.5,32.9,21,late
+39,2024-09-23,S3,GammaSupplies Co,7764.97,30.0,21.6,14,critical
+39,2024-09-23,S4,DeltaParts Inc,10420.23,31.6,28.8,21,late
+39,2024-09-23,S5,EpsilonServices,4889.63,7.2,9.1,7,slightly_late
+40,2024-09-30,S1,AlphaSteel Corp,21273.09,17.1,15.6,15,slightly_late
+40,2024-09-30,S2,BetaLogistics Ltd,13493.34,36.3,33.7,21,critical
+40,2024-09-30,S3,GammaSupplies Co,7396.85,34.5,24.1,14,critical
+40,2024-09-30,S4,DeltaParts Inc,11526.34,32.5,29.6,21,late
+40,2024-09-30,S5,EpsilonServices,4600.4,9.4,9.2,7,slightly_late
+41,2024-10-07,S1,AlphaSteel Corp,15844.44,16.1,15.8,15,slightly_late
+41,2024-10-07,S2,BetaLogistics Ltd,8764.01,39.5,34.7,21,critical
+41,2024-10-07,S3,GammaSupplies Co,8588.8,29.8,26.1,14,critical
+41,2024-10-07,S4,DeltaParts Inc,9121.65,33.5,30.3,21,late
+41,2024-10-07,S5,EpsilonServices,4197.24,10.4,9.3,7,slightly_late
+42,2024-10-14,S1,AlphaSteel Corp,19939.91,15.8,15.5,15,slightly_late
+42,2024-10-14,S2,BetaLogistics Ltd,13577.72,39.9,35.8,21,critical
+42,2024-10-14,S3,GammaSupplies Co,9252.67,35.0,29.1,14,critical
+42,2024-10-14,S4,DeltaParts Inc,7886.7,33.9,31.0,21,late
+42,2024-10-14,S5,EpsilonServices,3659.31,8.6,9.4,7,slightly_late
+43,2024-10-21,S1,AlphaSteel Corp,16034.03,15.6,15.5,15,slightly_late
+43,2024-10-21,S2,BetaLogistics Ltd,11715.39,40.0,36.8,21,critical
+43,2024-10-21,S3,GammaSupplies Co,7941.29,29.8,31.1,14,critical
+43,2024-10-21,S4,DeltaParts Inc,8964.85,34.9,31.9,21,late
+43,2024-10-21,S5,EpsilonServices,4909.45,10.1,9.4,7,slightly_late
+44,2024-10-28,S1,AlphaSteel Corp,24251.2,15.8,15.4,15,slightly_late
+44,2024-10-28,S2,BetaLogistics Ltd,14074.17,42.5,38.1,21,critical
+44,2024-10-28,S3,GammaSupplies Co,7271.59,31.9,30.9,14,critical
+44,2024-10-28,S4,DeltaParts Inc,6432.35,37.5,33.0,21,critical
+44,2024-10-28,S5,EpsilonServices,2864.68,8.7,9.3,7,slightly_late
+45,2024-11-04,S1,AlphaSteel Corp,20909.15,15.2,15.5,15,slightly_late
+45,2024-11-04,S2,BetaLogistics Ltd,10888.0,47.2,39.8,21,critical
+45,2024-11-04,S3,GammaSupplies Co,7292.74,32.3,31.3,14,critical
+45,2024-11-04,S4,DeltaParts Inc,6333.41,39.1,34.1,21,critical
+45,2024-11-04,S5,EpsilonServices,4249.95,11.8,9.4,7,slightly_late
+46,2024-11-11,S1,AlphaSteel Corp,19823.03,12.9,15.3,15,on_time
+46,2024-11-11,S2,BetaLogistics Ltd,12563.52,44.1,40.6,21,critical
+46,2024-11-11,S3,GammaSupplies Co,9592.21,34.8,32.3,14,critical
+46,2024-11-11,S4,DeltaParts Inc,8004.78,37.7,35.1,21,critical
+46,2024-11-11,S5,EpsilonServices,2371.61,9.6,9.5,7,slightly_late
+47,2024-11-18,S1,AlphaSteel Corp,19866.58,17.8,15.8,15,slightly_late
+47,2024-11-18,S2,BetaLogistics Ltd,11177.28,45.7,41.9,21,critical
+47,2024-11-18,S3,GammaSupplies Co,9985.17,36.7,33.1,14,critical
+47,2024-11-18,S4,DeltaParts Inc,7883.36,39.7,36.1,21,critical
+47,2024-11-18,S5,EpsilonServices,4332.03,9.6,9.8,7,slightly_late
+48,2024-11-25,S1,AlphaSteel Corp,20717.28,16.3,15.7,15,slightly_late
+48,2024-11-25,S2,BetaLogistics Ltd,9656.64,52.1,43.9,21,critical
+48,2024-11-25,S3,GammaSupplies Co,9184.48,38.4,33.6,14,critical
+48,2024-11-25,S4,DeltaParts Inc,6088.1,40.2,37.1,21,critical
+48,2024-11-25,S5,EpsilonServices,4956.62,11.1,10.0,7,slightly_late
+49,2024-12-02,S1,AlphaSteel Corp,18315.69,16.1,15.7,15,slightly_late
+49,2024-12-02,S2,BetaLogistics Ltd,13715.98,51.4,45.4,21,critical
+49,2024-12-02,S3,GammaSupplies Co,5452.2,31.2,33.8,14,critical
+49,2024-12-02,S4,DeltaParts Inc,11139.29,42.0,38.1,21,critical
+49,2024-12-02,S5,EpsilonServices,4933.75,12.7,10.3,7,late
+50,2024-12-09,S1,AlphaSteel Corp,15216.12,15.6,15.7,15,slightly_late
+50,2024-12-09,S2,BetaLogistics Ltd,8465.91,57.9,47.6,21,critical
+50,2024-12-09,S3,GammaSupplies Co,6204.14,39.4,34.3,14,critical
+50,2024-12-09,S4,DeltaParts Inc,6921.68,47.4,39.8,21,critical
+50,2024-12-09,S5,EpsilonServices,4381.05,13.8,10.9,7,late
+51,2024-12-16,S1,AlphaSteel Corp,16402.49,17.4,15.9,15,slightly_late
+51,2024-12-16,S2,BetaLogistics Ltd,9023.21,57.1,49.8,21,critical
+51,2024-12-16,S3,GammaSupplies Co,5991.02,31.6,34.5,14,critical
+51,2024-12-16,S4,DeltaParts Inc,6718.04,47.3,41.4,21,critical
+51,2024-12-16,S5,EpsilonServices,3666.39,15.4,11.6,7,late
+52,2024-12-23,S1,AlphaSteel Corp,21722.4,14.9,15.8,15,on_time
+52,2024-12-23,S2,BetaLogistics Ltd,10172.34,61.7,52.1,21,critical
+52,2024-12-23,S3,GammaSupplies Co,5180.81,39.5,35.5,14,critical
+52,2024-12-23,S4,DeltaParts Inc,11750.58,47.0,42.6,21,critical
+52,2024-12-23,S5,EpsilonServices,4774.11,14.4,12.3,7,late
