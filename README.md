@@ -179,7 +179,26 @@ cp .env.example .env
 ```
 
 ---
+### Getting Started
 
+1. Open the Live Demo: https://paypulse-app-six.vercel.app/
+
+2. Set up your business:
+   - Enter your **Business Name**
+   - Click **Continue**
+
+3. Complete onboarding:
+   - Select your **Industry**
+   - Choose number of **Key Suppliers**
+   - Click **Launch Dashboard**
+
+4. You will now enter the PayPulse dashboard.
+
+> 💡 Demo Mode: No real authentication required — this is a simulated onboarding flow.
+
+> 💡 Tip for Judges: Go to the **Simulator tab** to explore how risk changes in real time.
+
+---
 ## 📱 Usage Examples
 
 ### Scenario 1: Bank RM Reviews Portfolio
