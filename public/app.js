@@ -1679,6 +1679,153 @@ function getCurrentAvgDelay() {
     return Math.round(sum / suppliers.length);
 }
 
+/**
+ * Compute scenario results locally from current supplier data.
+ * This replaces the server-side /api/scenario when the API is unavailable (e.g. Vercel).
+ */
+function computeLocalScenario(scenarioType, params) {
+    const suppliers = (suppliersData && suppliersData.suppliers) || FALLBACK.suppliers.suppliers;
+    const forecastWeeks = 6;
+    const weekNumbers = Array.from({ length: forecastWeeks }, (_, i) => 53 + i);
+
+    const baselineForecasts = {};
+    const scenarioForecasts = {};
+    const supplierImpacts = [];
+
+    const currentRisk = getCurrentRiskLevel();
+    const riskOrder = { GREEN: 0, AMBER: 1, RED: 2 };
+
+    for (const s of suppliers) {
+        const delay = s.current_delay;
+        const slope = s.trend_slope || 0;
+        const terms = s.contractual_terms || 21;
+
+        // Baseline: continue current trend
+        const baseline = [];
+        for (let w = 0; w < forecastWeeks; w++) {
+            baseline.push(Math.round((delay + slope * (w + 1)) * 10) / 10);
+        }
+        baselineForecasts[s.supplier_id] = baseline;
+
+        // Scenario projection
+        let scenario = [];
+        switch (scenarioType) {
+            case 'continue_trend':
+                scenario = [...baseline]; // Same as baseline
+                break;
+            case 'stabilize_now':
+                scenario = Array(forecastWeeks).fill(Math.round(delay * 10) / 10); // Freeze at current
+                break;
+            case 'accelerate_payments':
+                for (let w = 0; w < forecastWeeks; w++) {
+                    const reduction = Math.min(delay * 0.08 * (w + 1), delay - terms);
+                    scenario.push(Math.round((delay - Math.max(0, reduction)) * 10) / 10);
+                }
+                break;
+            case 'revenue_drop':
+                for (let w = 0; w < forecastWeeks; w++) {
+                    scenario.push(Math.round((delay + (slope + 1.5) * (w + 1)) * 10) / 10);
+                }
+                break;
+            case 'custom':
+                const adj = (params && params.adjustment) || 0;
+                const targetId = (params && params.supplier_id) || s.supplier_id;
+                if (s.supplier_id === targetId) {
+                    for (let w = 0; w < forecastWeeks; w++) {
+                        scenario.push(Math.round((delay + adj + slope * (w + 1)) * 10) / 10);
+                    }
+                } else {
+                    scenario = [...baseline];
+                }
+                break;
+            default:
+                scenario = [...baseline];
+        }
+        scenarioForecasts[s.supplier_id] = scenario;
+
+        const baselineEnd = baseline[baseline.length - 1];
+        const scenarioEnd = scenario[scenario.length - 1];
+        const delta = Math.round((scenarioEnd - baselineEnd) * 10) / 10;
+        supplierImpacts.push({
+            supplier_id: s.supplier_id,
+            supplier_name: s.supplier_name,
+            baseline_end: baselineEnd,
+            scenario_end: scenarioEnd,
+            delta,
+            impact: delta > 2 ? 'worse' : delta < -2 ? 'better' : 'similar',
+        });
+    }
+
+    // Determine projected risk
+    const scenarioEndDelays = supplierImpacts.map(s => s.scenario_end);
+    const projectedRisk = AnalysisEngine.calculateRisk(scenarioEndDelays);
+
+    // Scenario name mapping
+    const scenarioNames = {
+        continue_trend: 'Current Trend Continues',
+        stabilize_now: 'Stabilize Payments Today',
+        accelerate_payments: 'Accelerate Payments',
+        revenue_drop: 'Revenue Drop (-20%)',
+        custom: 'Custom Scenario',
+    };
+
+    // Count worse/better suppliers
+    const worseCount = supplierImpacts.filter(s => s.impact === 'worse').length;
+    const betterCount = supplierImpacts.filter(s => s.impact === 'better').length;
+    const totalCount = supplierImpacts.length;
+
+    // Build comparison summary
+    let compSummary = '';
+    if (scenarioType === 'continue_trend') {
+        compSummary = `Without intervention, ${worseCount} of ${totalCount} suppliers would see worsening delays over ${forecastWeeks} weeks. ${worseCount} supplier(s) would exceed critical thresholds.`;
+    } else if (scenarioType === 'stabilize_now') {
+        compSummary = `If payment delays are stabilized at current levels, ${worseCount} supplier(s) would remain in critical territory.`;
+    } else if (scenarioType === 'accelerate_payments') {
+        compSummary = `Accelerating payments would improve ${betterCount} supplier relationship(s) over ${forecastWeeks} weeks.`;
+    } else if (scenarioType === 'revenue_drop') {
+        compSummary = `A 20% revenue decline would push ${worseCount} supplier(s) beyond critical thresholds.`;
+    } else {
+        compSummary = `Custom scenario affects ${worseCount + betterCount} of ${totalCount} suppliers.`;
+    }
+
+    // Risk delta string
+    const riskDelta = currentRisk === projectedRisk
+        ? `Risk level holds at ${projectedRisk}`
+        : `Risk level: ${currentRisk} → ${projectedRisk}`;
+
+    // Intervention impact
+    const riskWorsened = riskOrder[projectedRisk] > riskOrder[currentRisk];
+    const riskImproved = riskOrder[projectedRisk] < riskOrder[currentRisk];
+    let interventionText = '';
+    let interventionType = 'neutral';
+    let interventionDir = 'stable';
+    if (riskWorsened) {
+        interventionText = 'No action: risk escalates to critical levels. Immediate intervention required.';
+        interventionType = 'negative';
+        interventionDir = 'deteriorating';
+    } else if (riskImproved) {
+        interventionText = 'Active intervention shows positive results. Continue current strategy.';
+        interventionType = 'positive';
+        interventionDir = 'improving';
+    } else {
+        interventionText = 'Stabilization prevents further deterioration but does not resolve existing overdue balances.';
+        interventionType = 'neutral';
+        interventionDir = 'stable';
+    }
+
+    return {
+        scenario_type: scenarioType,
+        scenario_name: scenarioNames[scenarioType] || scenarioType,
+        forecast_weeks: weekNumbers,
+        baseline_forecast: baselineForecasts,
+        scenario_forecast: scenarioForecasts,
+        comparison_summary: compSummary,
+        risk_delta: riskDelta,
+        supplier_impacts: supplierImpacts,
+        intervention_impact: { text: interventionText, type: interventionType, direction: interventionDir },
+    };
+}
+
 async function runScenario() {
     const scenarioType = document.getElementById('scenario-select').value;
     const resultEl = document.getElementById('sim-result');
@@ -1711,8 +1858,8 @@ async function runScenario() {
         if (!res.ok) throw new Error(res.status);
         result = await res.json();
     } catch (err) {
-        console.warn('Scenario API failed, using fallback:', err.message);
-        result = FALLBACK.scenario;
+        console.warn('Scenario API failed, computing scenario locally:', err.message);
+        result = computeLocalScenario(scenarioType, params);
     }
 
     btn.disabled = false;
