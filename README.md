@@ -199,6 +199,30 @@ cp .env.example .env
 > 💡 Tip for Judges: Go to the **Simulator tab** to explore how risk changes in real time.
 
 ---
+---
+
+## 🔐 Demo Login
+
+To explore the platform quickly:
+
+- **Email:** `admin@nat`  
+- **Password:** `123456`  
+
+Or you can **create a new account** via the onboarding flow.
+
+> 💡 Note: Authentication is simulated for demo purposes — no real backend auth required.
+
+---
+
+## 🖥️ Dashboard Experience
+
+For demonstration simplicity:
+
+- Both **SME View** and **Bank Risk View** are available **on a single page**
+- This enables instant switching and comparison between perspectives
+- Designed to help judges/users quickly grasp the **dual insight model of PayPulse**
+
+---
 ## 📱 Usage Examples
 
 ### Scenario 1: Bank RM Reviews Portfolio
