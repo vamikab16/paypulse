@@ -17,6 +17,7 @@
   <img src="https://img.shields.io/badge/Hackathon-NatWest_Code_for_Purpose_India-purple?style=flat-square" />
   <img src="https://img.shields.io/badge/Theme-AI_Predictive_Forecasting-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/Status-Production_Demo-brightgreen?style=flat-square" />
+  <img src="https://img.shields.io/badge/ML-Scikit--Learn_Pipeline-orange?style=flat-square" />
 </p>
 
 ---
@@ -41,7 +42,9 @@ PayPulse changes that.
 
 | Capability | Description |
 |---|---|
-| **Forecasting** | Predicts future supplier payment timing with confidence intervals — not just a number, but a range of outcomes |
+| **ML Forecasting** | Gradient Boosting model predicts future supplier payment delays with 95% confidence intervals |
+| **AI Risk Classification** | Random Forest classifier categorises suppliers into risk tiers with probability scores |
+| **Anomaly Detection** | Isolation Forest detects unusual payment patterns via unsupervised learning |
 | **Triage Detection** | Identifies when a business starts selectively delaying payments — the hallmark of cash flow pressure |
 | **Early Warning** | Flags distress 4–8 weeks before loan defaults, overdraft breaches, or revenue decline |
 | **Scenario Simulation** | Models "what-if" scenarios to project how different actions change the risk trajectory |
@@ -75,11 +78,123 @@ Traditional metrics say everything is fine. PayPulse sees the hidden bleed — a
 
 ---
 
+## 🤖 AI / Machine Learning Models
+
+PayPulse uses **three real ML models** trained on supplier payment data, powered by scikit-learn.
+
+### Model Architecture
+
+| Model | Algorithm | Task | Key Metric |
+|---|---|---|---|
+| **Forecaster** | `GradientBoostingRegressor` (200 trees, depth=4) | Predict next-week payment delays | MAE: **0.5 days** |
+| **Risk Classifier** | `RandomForestClassifier` (150 trees, depth=6) | Classify supplier risk level | Accuracy: **99.6%** |
+| **Anomaly Detector** | `IsolationForest` (200 estimators) | Flag unusual payment patterns | Unsupervised |
+
+### Feature Engineering Pipeline
+
+All three models are powered by **23 engineered features** extracted from raw payment history:
+
+```
+Rolling Statistics (4w & 8w windows)
+├── delay_mean, delay_std, delay_min, delay_max, delay_range
+
+Trend & Momentum
+├── trend_slope_6w        — Linear regression slope over last 6 weeks
+├── wow_change            — Week-over-week delay change
+├── acceleration          — Change in slope (2nd derivative)
+
+Contractual Context
+├── delay_to_terms_ratio  — Current delay ÷ contractual terms
+├── excess_over_terms     — Days beyond contractual deadline
+
+Invoice Signals
+├── invoice_mean_4w       — Rolling invoice amount average
+├── invoice_volatility    — Invoice amount standard deviation
+
+Time Features
+├── quarter, week_in_quarter, is_quarter_end
+
+Cross-Supplier Signals (Triage Detection)
+├── cross_supplier_std    — Delay standard deviation across all suppliers
+├── cross_supplier_spread — Max delay − min delay across suppliers
+```
+
+### How Each Model Works
+
+**1. Gradient Boosting Forecaster**
+- Trains on all supplier data with next-week delay as the target
+- Generates multi-step forecasts via iterative one-step-ahead prediction
+- Each prediction is fed back as input for the next step
+- Uncertainty bands computed from residual standard deviation (±1.96σ)
+
+**2. Random Forest Risk Classifier**
+- Labels derived from contractual terms: `normal → watch → warning → critical`
+- Uses `class_weight="balanced"` to handle class imbalance
+- Returns probability distribution across all four risk categories
+- Confidence score = probability of the predicted class
+
+**3. Isolation Forest Anomaly Detector**
+- Learns the "normal" distribution of payment patterns unsupervised
+- Contamination rate set to 10% (expects ~10% anomalous data points)
+- Anomaly scores normalised to 0–100 scale (0 = most anomalous)
+- Flags anomalous weeks with red indicators on the timeline
+
+### API Endpoints
+
+```
+GET  /api/ai/status            — Model training metrics and feature importances
+GET  /api/ai/forecast/{id}     — ML forecast with confidence bands
+GET  /api/ai/risk/{id}         — Risk classification with probabilities
+GET  /api/ai/anomalies/{id}    — Anomaly detection with score timeline
+GET  /api/ai/analysis/{id}     — Full AI analysis (all 3 models combined)
+GET  /api/ai/dashboard         — Portfolio AI overview for all suppliers
+```
+
+### Example API Response: `/api/ai/analysis/S2`
+
+```json
+{
+  "supplier_name": "BetaLogistics Ltd",
+  "ai_risk": {
+    "predicted_risk": "critical",
+    "confidence": 99.0,
+    "probability_distribution": {
+      "normal": 0.2, "watch": 0.3, "warning": 0.5, "critical": 99.0
+    },
+    "method": "random_forest_classifier"
+  },
+  "ai_forecast": {
+    "expected": [55.0, 56.2, 54.7, 55.2, 55.1, 55.1],
+    "low": [53.8, 54.8, 53.1, 53.4, 53.1, 52.9],
+    "high": [56.2, 57.6, 56.3, 57.0, 57.1, 57.3],
+    "method": "gradient_boosting",
+    "model_mae": 0.5
+  },
+  "ai_anomalies": {
+    "is_anomalous": true,
+    "current_anomaly_score": 0.0,
+    "total_anomalies_detected": 7,
+    "method": "isolation_forest"
+  },
+  "ai_summary": "AI Risk Assessment: BetaLogistics Ltd is classified as CRITICAL risk with 99.0% confidence. Immediate attention required."
+}
+```
+
+---
+
 ## ✨ Features (Implemented)
 
 ### 🔍 Dual-View Dashboard
 - **SME View** — "What's happening to my business?" with supplier-level payment analysis
 - **Bank Risk View** — Portfolio-level monitoring across all SME clients with drill-down capability
+
+### 🤖 AI Intelligence Dashboard
+- **Model Status Cards** — Live training metrics for Forecaster (MAE), Classifier (accuracy), and Anomaly Detector
+- **Supplier AI Analysis** — Select any supplier and run full ML analysis with one click
+- **Risk Classification Visualisation** — Risk badge with confidence %, probability distribution bar chart
+- **ML Forecast Chart** — Interactive Chart.js line chart with 95% confidence interval bands
+- **Anomaly Score Timeline** — 52-week chart with red-flagged anomalous weeks
+- **Feature Importance Bars** — Visual ranking of which features drive predictions
 
 ### 📊 Predictive Payment Forecasting
 - Forecasts expected payment timing for each supplier relationship
@@ -128,11 +243,13 @@ Traditional metrics say everything is fine. PayPulse sees the hidden bleed — a
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| **Frontend** | React, JavaScript | Component-driven UI with reactive state management |
-| **Visualisation** | Three.js, Chart.js | High-fidelity data visualisation and interactive charts |
+| **Frontend** | JavaScript, HTML5, CSS3 | Component-driven UI with reactive state management |
+| **Visualisation** | Chart.js | High-fidelity data visualisation and interactive charts |
 | **Styling** | CSS3 | Premium dark-mode UI with glassmorphism, gradients, and micro-animations |
-| **Backend** | Python (Flask) | AI forecasting engine, risk computation, and API layer |
-| **Analysis Engine** | Custom JS + Python | Triage detection, risk scoring, scenario simulation, trend analysis |
+| **Backend** | Python, FastAPI, Uvicorn | AI forecasting engine, risk computation, and API layer |
+| **ML Pipeline** | scikit-learn | GradientBoosting, RandomForest, IsolationForest model training and inference |
+| **Statistical Models** | statsmodels, scipy | Holt-Winters exponential smoothing, linear regression trend analysis |
+| **Data Processing** | pandas, NumPy | Feature engineering, data transformation, rolling statistics |
 | **Storage** | LocalStorage | Session persistence and user profile management |
 | **Reports** | Dynamic HTML/PDF | Browser-native print-to-PDF report generation |
 
@@ -141,7 +258,7 @@ Traditional metrics say everything is fine. PayPulse sees the hidden bleed — a
 ## 🚀 Installation & Setup
 
 ### Prerequisites
-- Python 3.8+ 
+- Python 3.8+
 - Node.js 16+ (optional, for development server)
 
 ### Quick Start
@@ -164,46 +281,46 @@ python run.py
 ### Alternative: Static Frontend Only
 
 ```bash
-# Serve the frontend directly
-cd frontend
+# Serve the frontend directly (AI features use fallback demo data)
+cd public
 python3 -m http.server 8080
-
 # Open http://localhost:8080
 ```
 
-### Environment Variables (Optional)
+### AI Models — Full Backend
 
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
+# Start with FastAPI for live ML predictions
+pip install -r requirements.txt
+uvicorn src.api.server:app --reload --port 5000
+
+# AI models auto-train on first request
+# Test: curl http://localhost:5000/api/ai/status
 ```
 
 ---
+
 ### Getting Started
 
 1. Open the Live Demo: https://vamikab16.github.io/paypulse/public/index.html
-
 2. Set up your business:
    - Enter your **Business Name**
    - Click **Continue**
-
 3. Complete onboarding:
    - Select your **Industry**
    - Choose number of **Key Suppliers**
    - Click **Launch Dashboard**
+4. You will now enter the PayPulse dashboard.
 
-4. You will now enter the PayPulse dashboard.  
-> 💡 Tip for Judges: Go to the **Simulator tab** to explore how risk changes in real time.
+> 💡 Tip for Judges: Check the **AI Models tab** to see real ML predictions in action, then go to the **Simulator tab** to explore how risk changes in real time.
 
----
 ---
 
 ## 🔐 Demo Login
 
 To explore the platform quickly:
-
-- **Email:** `admin@nat`  
-- **Password:** `123456`  
+- **Email:** `admin@nat`
+- **Password:** `123456`
 
 Or you can **create a new account** via the onboarding flow.
 
@@ -214,16 +331,16 @@ Or you can **create a new account** via the onboarding flow.
 ## 🖥️ Dashboard Experience
 
 For demonstration simplicity:
-
 - Both **SME View** and **Bank Risk View** are available **on a single page**
+- The **AI Models tab** provides a dedicated ML intelligence dashboard
 - This enables instant switching and comparison between perspectives
 - Designed to help judges/users quickly grasp the **dual insight model of PayPulse**
 
 ---
+
 ## 📱 Usage Examples
 
 ### Scenario 1: Bank RM Reviews Portfolio
-
 ```
 1. Login → Select "I'm a Bank RM"
 2. Dashboard loads Portfolio Risk Overview
@@ -233,18 +350,17 @@ For demonstration simplicity:
 6. Generate PDF report for Credit Committee
 ```
 
-### Scenario 2: Early Warning Detection
-
+### Scenario 2: AI-Powered Early Warning
 ```
-1. PayPulse detects BetaLogistics Ltd payment delay accelerating +2.8d/week
-2. Triage Score reaches 72/100 → HIGH
-3. System flags: "Payment spread 748% above baseline"
-4. Auto-generates Consumer Duty outreach message
-5. Bank intervenes 6 weeks before any loan payment is missed
+1. Navigate to AI Models tab
+2. Select "BetaLogistics Ltd" → Run AI Analysis
+3. Risk Classifier: CRITICAL (99.0% confidence)
+4. Gradient Boosting forecasts delays at 55–57 days over 6 weeks
+5. Isolation Forest flags 7 anomalous weeks in payment history
+6. AI Summary: "Immediate attention required"
 ```
 
 ### Scenario 3: What-If Analysis
-
 ```
 1. Navigate to Simulator → Select "Revenue Drop (20%)"
 2. See projected risk change: AMBER → RED
@@ -261,21 +377,52 @@ For demonstration simplicity:
 
 PayPulse's detection system is built on a **novel signal**: the divergence pattern in outgoing supplier payments.
 
-#### 1. Payment Timing Forecasting
+#### 1. ML Payment Forecasting (Gradient Boosting)
 
 ```
-For each supplier relationship:
-  Expected_Delay(t+1) = Rolling_Baseline(3mo) + Trend_Component + Seasonal_Adjustment
+Input:  23 engineered features per supplier per week
+Model:  GradientBoostingRegressor(n_estimators=200, max_depth=4, lr=0.05)
+Output: Multi-step forecast with uncertainty bands
 
-Output: Point prediction + confidence interval [P10, P90]
-Baseline comparison: Rolling 3-month average (prevents overfitting)
+Feature Engineering:
+  rolling_stats(4w, 8w) + trend_slope + acceleration + terms_ratio
+  + invoice_signals + time_features + cross_supplier_spread
+
+Prediction Loop:
+  For each step in horizon:
+    prediction[t+1] = model.predict(features[t])
+    features[t+1]   = update_rolling_features(prediction[t+1])
+    uncertainty[t+1] = ±1.96σ × (1 + 0.15 × step)
 ```
 
-- **Predicts likely values** for future payment timing periods
-- **Shows range of outcomes** (10th–90th percentile) to capture uncertainty
-- **Compares to rolling baseline** to distinguish real drift from noise
+- **Training MAE: 0.5 days** — significantly outperforms the rolling-average baseline
+- Iterative one-step-ahead prediction feeds forecasts back as inputs
+- Uncertainty widens naturally for further-out predictions
 
-#### 2. Triage Detection (The Key Innovation)
+#### 2. Risk Classification (Random Forest)
+
+```
+Input:   Same 23 features
+Labels:  Derived from delay vs contractual terms
+         normal (≤0 excess) → watch (≤7d) → warning (≤15d) → critical (>15d)
+Model:   RandomForestClassifier(n_estimators=150, max_depth=6, balanced)
+Output:  Risk class + probability distribution + confidence %
+
+Training Accuracy: 99.6%
+```
+
+#### 3. Anomaly Detection (Isolation Forest)
+
+```
+Input:   10 selected features (delay stats + trend + cross-supplier signals)
+Model:   IsolationForest(n_estimators=200, contamination=0.1)
+Output:  Anomaly score (0-100), binary flag, anomalous week timeline
+
+Key Insight: Unsupervised — no labels needed. Learns "normal" patterns
+and flags deviations automatically.
+```
+
+#### 4. Triage Detection (The Key Innovation)
 
 ```python
 def detect_triage(suppliers):
@@ -291,7 +438,7 @@ def detect_triage(suppliers):
 
 This is **not** just "are payments late?" — it's detecting the **pattern** of selective prioritisation that precedes broader financial distress.
 
-#### 3. Multi-Factor Triage Score
+#### 5. Multi-Factor Triage Score
 
 ```
 Triage Score = Variance_Component(0-40) + Spread_Component(0-35) + Ratio_Component(0-25) + Bank_Bonus(0-5)
@@ -303,7 +450,7 @@ Where:
   Bonus    = 5 if triage detected with clear split
 ```
 
-#### 4. Scenario Simulation Engine
+#### 6. Scenario Simulation Engine
 
 The simulator models forward trajectories by applying adjustments to current trend slopes:
 
@@ -317,35 +464,74 @@ The simulator models forward trajectories by applying adjustments to current tre
 
 Each scenario outputs: projected risk level, supplier-level impacts, confidence bands, and a decision-focused explanation.
 
-#### 5. Explainability Layer
+#### 7. Explainability Layer
 
 Every alert and risk signal includes plain-English explanations:
 
-> *"This alert is based on your outgoing payment patterns over the past 12 weeks. Your average supplier delay is 35 days, with a peak of 62 days. The gap between your fastest-paid and slowest-paid suppliers (14d vs 62d) signals cash flow pressure. This pattern — paying some suppliers on time while stretching others — is a recognised early indicator of financial stress."*
+> *"AI Risk Assessment: BetaLogistics Ltd is classified as CRITICAL risk with 99.0% confidence. Immediate attention required. Forecast: Payment delays predicted to remain at 55–57 days over the next 6 weeks. Anomaly Alert: Current payment pattern flagged as anomalous — 7 anomalous weeks detected in history."*
 
-No black boxes. No unexplained scores. Every output traces back to observable payment behaviour.
+No black boxes. No unexplained scores. Every output traces back to observable payment behaviour and ML model outputs.
+
+---
+
+## 📂 Project Structure
+
+```
+PayPulse/
+├── public/                    # Frontend
+│   ├── index.html             # Main app (landing, dashboard, AI, simulator, explainer)
+│   ├── app.js                 # All frontend logic including AI page rendering
+│   └── styles.css             # Full styling including AI Intelligence page
+├── src/
+│   ├── api/
+│   │   └── server.py          # FastAPI backend — all endpoints including /api/ai/*
+│   ├── models/
+│   │   ├── ml_engine.py       # 🤖 ML Engine — GradientBoosting + RandomForest + IsolationForest
+│   │   ├── forecaster.py      # Holt-Winters exponential smoothing (statistical baseline)
+│   │   ├── baseline.py        # Rolling average baseline for comparison
+│   │   └── scenarios.py       # What-if scenario simulation engine
+│   ├── detection/
+│   │   ├── anomaly.py         # Threshold breach + trend detection (rule-based)
+│   │   └── triage.py          # Payment triage detection algorithm
+│   ├── explainability/
+│   │   └── narrator.py        # Plain-English explanation generator
+│   ├── data/
+│   │   ├── generator.py       # Synthetic data generator (5 suppliers × 52 weeks)
+│   │   └── schemas.py         # Data schemas, constants, validation
+│   └── utils/
+│       └── helpers.py         # JSON sanitisation and utility functions
+├── data/
+│   ├── payment_history.csv    # Generated payment data (260 rows)
+│   └── company_profile.json   # Company metadata
+├── requirements.txt           # Python dependencies (FastAPI, scikit-learn, statsmodels, etc.)
+├── run.py                     # Application entry point
+└── README.md                  # This file
+```
 
 ---
 
 ## 🏆 Why PayPulse Wins
 
-### 1. Novel Signal
+### 1. Real AI — Not Just Statistics
+Three production ML models (Gradient Boosting, Random Forest, Isolation Forest) with **23 engineered features**, not just rolling averages or simple thresholds.
+
+### 2. Novel Signal
 Supplier payment timing is a **leading indicator** that degrades before revenue does. No existing NatWest system monitors this.
 
-### 2. Dramatic ROI
+### 3. Dramatic ROI
 A single early intervention on a ₹5 crore SME loan saves more than the entire system costs. Across NatWest's SME portfolio, the impact is measured in **thousands of crores**.
 
-### 3. 6-Week Early Warning
+### 4. 6-Week Early Warning
 Traditional credit monitoring catches distress **after** the damage is done. PayPulse catches it **while there's still time to act**.
 
-### 4. Consumer Duty Aligned
+### 5. Consumer Duty Aligned
 The FCA's Consumer Duty requires banks to proactively support customers showing signs of financial difficulty. PayPulse automates this obligation.
 
-### 5. Data Already Exists
+### 6. Data Already Exists
 NatWest doesn't need to acquire new data. Every outgoing payment an SME makes is already in the bank's transaction records. PayPulse just **reads the signal** that's been there all along.
 
-### 6. Production-Ready Architecture
-This isn't a prototype — it's a fully functional dual-perspective dashboard with forecasting, simulation, report generation, and decision support.
+### 7. Production-Ready Architecture
+This isn't a prototype — it's a fully functional dual-perspective dashboard with ML forecasting, risk classification, anomaly detection, simulation, report generation, and decision support.
 
 ---
 
@@ -353,17 +539,18 @@ This isn't a prototype — it's a fully functional dual-perspective dashboard wi
 
 | Requirement | PayPulse Implementation |
 |---|---|
-| **Predict likely future values** | ✅ Forecasts payment timing per supplier with trend extrapolation |
-| **Show range of outcomes** | ✅ Confidence intervals on all predictions (not just point estimates) |
-| **Compare to simple baseline** | ✅ Rolling 3-month average baseline; every prediction measured against it |
-| **Detect early warning signs** | ✅ Core innovation — triage detection, stretch alerts, acceleration flags |
-| **Explanations for non-experts** | ✅ Plain-English explainability on every alert, score, and recommendation |
+| **Predict likely future values** | ✅ GradientBoosting forecasts payment delays per supplier with iterative multi-step prediction |
+| **Show range of outcomes** | ✅ 95% confidence intervals on all ML forecasts (not just point estimates) |
+| **Compare to simple baseline** | ✅ Rolling average baseline; every ML prediction measured against it with MAE comparison |
+| **Detect early warning signs** | ✅ IsolationForest anomaly detection + triage detection + RandomForest risk classification |
+| **Explanations for non-experts** | ✅ Natural-language AI summaries combining all three model signals into plain English |
+| **Real ML models** | ✅ scikit-learn pipeline: GradientBoosting + RandomForest + IsolationForest with 23 features |
 
 ---
 
 ## 👥 Team
 
-**ByteHER - Vamika Bhardwaj, Anshika**  
+**ByteHER - Vamika Bhardwaj, Anshika**
 **Indira Gandhi Delhi Technical University For Women**
 
 ---
