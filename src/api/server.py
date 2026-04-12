@@ -12,6 +12,14 @@ Endpoints:
     GET  /api/triage           — Triage detection results + explanation
     POST /api/scenario         — Run a what-if scenario
     GET  /api/health-timeline  — Weekly risk scores for timeline chart
+
+    --- AI / ML Endpoints ---
+    GET  /api/ai/forecast/{id}   — ML-powered forecast (Gradient Boosting)
+    GET  /api/ai/risk/{id}       — ML risk classification (Random Forest)
+    GET  /api/ai/anomalies/{id}  — ML anomaly detection (Isolation Forest)
+    GET  /api/ai/analysis/{id}   — Full AI analysis (all 3 models combined)
+    GET  /api/ai/dashboard       — AI dashboard overview for all suppliers
+    GET  /api/ai/status          — Model training status and metrics
 """
 
 import os
@@ -36,6 +44,7 @@ from src.explainability.narrator import (
     generate_bank_risk_summary,
 )
 from src.utils.helpers import sanitize_for_json
+from src.models.ml_engine import PayPulseAI
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +68,9 @@ app.add_middleware(
 # Global data store — loaded once at startup
 _data = {}
 
+# Global AI engine — trained once at startup
+_ai_engine = PayPulseAI()
+
 
 def _ensure_data():
     """Load or generate data if not already in memory."""
@@ -77,6 +89,14 @@ def _ensure_data():
             _data["profile"] = profile
 
     return _data["df"], _data["profile"]
+
+
+def _ensure_ai():
+    """Train AI models if not already ready."""
+    if not _ai_engine.is_ready:
+        df, _ = _ensure_data()
+        _ai_engine.train(df)
+    return _ai_engine
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +378,92 @@ def get_bank_risk():
     bank_risk = generate_bank_risk_summary(all_alerts, all_forecasts, triage_data)
 
     return sanitize_for_json(bank_risk)
+
+
+# ---------------------------------------------------------------------------
+# AI / ML Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ai/status")
+def get_ai_status():
+    """Return AI model training status and performance metrics."""
+    ai = _ensure_ai()
+    return sanitize_for_json({
+        "status": "ready" if ai.is_ready else "not_trained",
+        "models": {
+            "forecaster": {
+                "type": "GradientBoostingRegressor",
+                "n_estimators": 200,
+                "training_mae": ai.forecaster.train_mae,
+                "top_features": ai.forecaster.feature_importances,
+            },
+            "risk_classifier": {
+                "type": "RandomForestClassifier",
+                "n_estimators": 150,
+                "training_accuracy": ai.risk_classifier.train_accuracy,
+                "top_features": ai.risk_classifier.feature_importances,
+            },
+            "anomaly_detector": {
+                "type": "IsolationForest",
+                "n_estimators": 200,
+                "contamination": 0.1,
+            },
+        },
+        "features_engineered": 23,
+        "training_samples": len(ai.feature_df) if ai.feature_df is not None else 0,
+    })
+
+
+@app.get("/api/ai/forecast/{supplier_id}")
+def get_ai_forecast(supplier_id: str, horizon: int = 6):
+    """Return ML-powered forecast for a specific supplier."""
+    if supplier_id not in SUPPLIER_IDS:
+        return JSONResponse(status_code=404, content={"error": f"Unknown supplier: {supplier_id}"})
+
+    ai = _ensure_ai()
+    forecast = ai.forecast(supplier_id, horizon)
+    return sanitize_for_json(forecast)
+
+
+@app.get("/api/ai/risk/{supplier_id}")
+def get_ai_risk(supplier_id: str):
+    """Return ML risk classification for a specific supplier."""
+    if supplier_id not in SUPPLIER_IDS:
+        return JSONResponse(status_code=404, content={"error": f"Unknown supplier: {supplier_id}"})
+
+    ai = _ensure_ai()
+    risk = ai.classify_risk(supplier_id)
+    return sanitize_for_json(risk)
+
+
+@app.get("/api/ai/anomalies/{supplier_id}")
+def get_ai_anomalies(supplier_id: str):
+    """Return ML anomaly detection for a specific supplier."""
+    if supplier_id not in SUPPLIER_IDS:
+        return JSONResponse(status_code=404, content={"error": f"Unknown supplier: {supplier_id}"})
+
+    ai = _ensure_ai()
+    anomalies = ai.detect_anomalies(supplier_id)
+    return sanitize_for_json(anomalies)
+
+
+@app.get("/api/ai/analysis/{supplier_id}")
+def get_ai_analysis(supplier_id: str, horizon: int = 6):
+    """Return complete AI analysis for a supplier (forecast + risk + anomalies)."""
+    if supplier_id not in SUPPLIER_IDS:
+        return JSONResponse(status_code=404, content={"error": f"Unknown supplier: {supplier_id}"})
+
+    ai = _ensure_ai()
+    analysis = ai.full_analysis(supplier_id, horizon)
+    return sanitize_for_json(analysis)
+
+
+@app.get("/api/ai/dashboard")
+def get_ai_dashboard():
+    """Return AI dashboard overview for all suppliers."""
+    ai = _ensure_ai()
+    dashboard = ai.full_dashboard()
+    return sanitize_for_json(dashboard)
 
 
 # ---------------------------------------------------------------------------
