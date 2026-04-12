@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  🚀 <a href="https://vamikab16.github.io/paypulse/public/index.html"><strong>Live Demo</strong></a> &nbsp;·&nbsp;
+  🚀 <a href="https://paypulse-rb6h.onrender.com"><strong>Live Demo</strong></a> &nbsp;·&nbsp;
 </p>
 
 <p align="center">
@@ -296,7 +296,7 @@ uvicorn src.api.server:app --reload --port 5000
 
 ### Getting Started
 
-1. Open the Live Demo: https://vamikab16.github.io/paypulse/public/index.html
+1. Open the Live Demo: https://paypulse-rb6h.onrender.com or https://vamikab16.github.io/paypulse/public/index.html
 2. Set up your business:
    - Enter your **Business Name**
    - Click **Continue**
