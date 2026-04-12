@@ -550,7 +550,7 @@ This isn't a prototype — it's a fully functional dual-perspective dashboard wi
 
 ## 👥 Team
 
-**ByteHER - Vamika Bhardwaj, Anshika**
+**ByteHER - Vamika Bhardwaj, Anshika**  
 **Indira Gandhi Delhi Technical University For Women**
 
 ---
