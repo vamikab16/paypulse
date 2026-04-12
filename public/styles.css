@@ -3440,9 +3440,67 @@ body::after {
     margin: 0 auto 16px;
 }
 
+/* Model Comparison */
+.ai-compare-chart-wrap { margin-bottom: 16px; }
+.ai-compare-meta {
+    display: flex; gap: 16px; flex-wrap: wrap;
+}
+.ai-compare-winner {
+    background: linear-gradient(135deg, rgba(0, 230, 118, 0.1), rgba(0, 230, 118, 0.03));
+    border: 1px solid rgba(0, 230, 118, 0.25);
+    border-radius: var(--radius-sm); padding: 16px 20px;
+    flex: 1; min-width: 200px;
+}
+.ai-compare-winner .winner-label {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); display: block;
+}
+.ai-compare-winner .winner-value {
+    font-size: 1.2rem; font-weight: 700; color: var(--green);
+}
+
+/* Clustering */
+.ai-cluster-cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;
+}
+.ai-cluster-card {
+    background: var(--bg-card); border: 1px solid var(--bg-card-border);
+    border-radius: var(--radius); padding: 20px; border-left: 4px solid;
+}
+.ai-cluster-card h4 { font-size: 0.95rem; margin-bottom: 4px; }
+.ai-cluster-card .cluster-badge {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px;
+}
+.ai-cluster-card .cluster-desc {
+    font-size: 0.8rem; color: var(--text-dim); margin-bottom: 8px;
+}
+.ai-cluster-card .cluster-action {
+    font-size: 0.75rem; color: var(--purple); font-weight: 500;
+}
+
+/* Live Simulation */
+.ai-live-controls {
+    display: flex; gap: 12px; align-items: center; margin-bottom: 16px;
+}
+.ai-live-status { font-size: 0.85rem; color: var(--text-dim); }
+.ai-live-results {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;
+}
+.ai-live-card {
+    background: var(--bg-card); border: 1px solid var(--bg-card-border);
+    border-radius: var(--radius-sm); padding: 14px;
+}
+.ai-live-card .live-name { font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
+.ai-live-card .live-delay { font-size: 1.3rem; font-weight: 700; }
+.ai-live-card .live-status {
+    font-size: 0.7rem; text-transform: uppercase; padding: 2px 6px;
+    border-radius: 3px; display: inline-block; margin-top: 4px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .ai-status-cards { grid-template-columns: 1fr; }
     .ai-risk-probs { grid-template-columns: repeat(2, 1fr); }
     .ai-feature-name { width: 100px; font-size: 0.7rem; }
+    .ai-cluster-cards { grid-template-columns: 1fr; }
 }

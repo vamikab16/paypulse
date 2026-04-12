@@ -662,13 +662,51 @@
                         </div>
                     </section>
 
-                    <!-- Feature Importances -->
-                    <section class="ai-features-section">
+
+
+                    <!-- Neural Network Forecast -->
+                    <section class="ai-neural-section">
                         <h2 class="section-label">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
-                            Top Feature Importances
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>
+                            GRU Neural Network Forecast
                         </h2>
-                        <div class="ai-features-bars" id="ai-features-bars"></div>
+                        <div class="chart-wrap">
+                            <canvas id="ai-neural-chart"></canvas>
+                        </div>
+                    </section>
+
+                    <!-- Model Comparison -->
+                    <section class="ai-compare-section">
+                        <h2 class="section-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                            Model Comparison (Head-to-Head)
+                        </h2>
+                        <div class="ai-compare-chart-wrap">
+                            <canvas id="ai-compare-chart"></canvas>
+                        </div>
+                        <div class="ai-compare-meta" id="ai-compare-meta"></div>
+                    </section>
+
+                    <!-- Supplier Clustering -->
+                    <section class="ai-cluster-section">
+                        <h2 class="section-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="2"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+                            K-Means Supplier Clustering
+                        </h2>
+                        <div class="ai-cluster-cards" id="ai-cluster-cards"></div>
+                    </section>
+
+                    <!-- Live Simulation -->
+                    <section class="ai-live-section">
+                        <h2 class="section-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            Live Data Simulation
+                        </h2>
+                        <div class="ai-live-controls">
+                            <button class="btn btn-primary btn-sm" id="ai-simulate-btn">Simulate Next Week</button>
+                            <span class="ai-live-status" id="ai-live-status"></span>
+                        </div>
+                        <div class="ai-live-results" id="ai-live-results"></div>
                     </section>
                 </div>
             </main>

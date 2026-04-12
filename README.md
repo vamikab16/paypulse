@@ -80,15 +80,18 @@ Traditional metrics say everything is fine. PayPulse sees the hidden bleed — a
 
 ## 🤖 AI / Machine Learning Models
 
-PayPulse uses **three real ML models** trained on supplier payment data, powered by scikit-learn.
+PayPulse uses **six real AI/ML models** trained on supplier payment data — including a neural network built from scratch in NumPy (no PyTorch/TensorFlow dependency).
 
 ### Model Architecture
 
-| Model | Algorithm | Task | Key Metric |
-|---|---|---|---|
-| **Forecaster** | `GradientBoostingRegressor` (200 trees, depth=4) | Predict next-week payment delays | MAE: **0.5 days** |
-| **Risk Classifier** | `RandomForestClassifier` (150 trees, depth=6) | Classify supplier risk level | Accuracy: **99.6%** |
-| **Anomaly Detector** | `IsolationForest` (200 estimators) | Flag unusual payment patterns | Unsupervised |
+| # | Model | Algorithm | Task | Key Metric |
+|---|---|---|---|---|
+| 1 | **Forecaster** | `GradientBoostingRegressor` (200 trees, depth=4) | Predict next-week payment delays | MAE: **0.5 days** |
+| 2 | **Risk Classifier** | `RandomForestClassifier` (150 trees, depth=6) | Classify supplier risk level | Accuracy: **99.6%** |
+| 3 | **Anomaly Detector** | `IsolationForest` (200 estimators) | Flag unusual payment patterns | Unsupervised |
+| 4 | **Supplier Clusterer** | `KMeans` (auto-tuned k, silhouette-optimised) | Segment suppliers by behaviour | Silhouette: **0.34** |
+| 5 | **Neural Forecaster** | `GRU Neural Network` (hidden=32, from-scratch NumPy) | Deep learning delay forecasting | MAE: **1.22 days** |
+| 6 | **Explainability** | `Permutation SHAP` (custom implementation) | Per-prediction feature attribution | Top-5 drivers |
 
 ### Feature Engineering Pipeline
 
@@ -142,11 +145,16 @@ Cross-Supplier Signals (Triage Detection)
 ### API Endpoints
 
 ```
-GET  /api/ai/status            — Model training metrics and feature importances
-GET  /api/ai/forecast/{id}     — ML forecast with confidence bands
-GET  /api/ai/risk/{id}         — Risk classification with probabilities
-GET  /api/ai/anomalies/{id}    — Anomaly detection with score timeline
-GET  /api/ai/analysis/{id}     — Full AI analysis (all 3 models combined)
+GET  /api/ai/status            — Model training metrics and feature importances (6 models)
+GET  /api/ai/forecast/{id}     — ML forecast with confidence bands (Gradient Boosting)
+GET  /api/ai/risk/{id}         — Risk classification with probabilities (Random Forest)
+GET  /api/ai/anomalies/{id}    — Anomaly detection with score timeline (Isolation Forest)
+GET  /api/ai/neural/{id}       — GRU neural network forecast (deep learning)
+GET  /api/ai/explain/{id}      — Permutation SHAP feature explanations
+GET  /api/ai/clusters          — K-Means supplier behaviour segmentation
+GET  /api/ai/compare/{id}      — Head-to-head model comparison (MAE benchmarking)
+GET  /api/ai/simulate          — Real-time data simulation (trend extrapolation)
+GET  /api/ai/analysis/{id}     — Full AI analysis (all 6 models combined)
 GET  /api/ai/dashboard         — Portfolio AI overview for all suppliers
 ```
 
@@ -155,28 +163,14 @@ GET  /api/ai/dashboard         — Portfolio AI overview for all suppliers
 ```json
 {
   "supplier_name": "BetaLogistics Ltd",
-  "ai_risk": {
-    "predicted_risk": "critical",
-    "confidence": 99.0,
-    "probability_distribution": {
-      "normal": 0.2, "watch": 0.3, "warning": 0.5, "critical": 99.0
-    },
-    "method": "random_forest_classifier"
-  },
-  "ai_forecast": {
-    "expected": [55.0, 56.2, 54.7, 55.2, 55.1, 55.1],
-    "low": [53.8, 54.8, 53.1, 53.4, 53.1, 52.9],
-    "high": [56.2, 57.6, 56.3, 57.0, 57.1, 57.3],
-    "method": "gradient_boosting",
-    "model_mae": 0.5
-  },
-  "ai_anomalies": {
-    "is_anomalous": true,
-    "current_anomaly_score": 0.0,
-    "total_anomalies_detected": 7,
-    "method": "isolation_forest"
-  },
-  "ai_summary": "AI Risk Assessment: BetaLogistics Ltd is classified as CRITICAL risk with 99.0% confidence. Immediate attention required."
+  "ai_risk": { "predicted_risk": "critical", "confidence": 99.0, "method": "random_forest_classifier" },
+  "ai_forecast": { "expected": [55.0, 56.2, 54.7, ...], "method": "gradient_boosting", "model_mae": 0.5 },
+  "ai_neural_forecast": { "expected": [42.5, 38.2, 35.9, ...], "method": "gru_neural_network" },
+  "ai_anomalies": { "is_anomalous": true, "total_anomalies_detected": 7, "method": "isolation_forest" },
+  "ai_shap": { "top_drivers": ["delay_mean_4w", "delay_max_4w", "delay_mean_8w"], "method": "permutation_shap" },
+  "ai_cluster": { "cluster_label": "Critical Deterioration", "recommended_action": "Escalate to Credit Committee." },
+  "ai_model_comparison": { "best_model": "GRU Neural Net", "improvement_over_baseline": 15.2 },
+  "model_info": { "total_models": 6 }
 }
 ```
 

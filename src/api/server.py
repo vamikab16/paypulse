@@ -411,6 +411,23 @@ def get_ai_status():
         },
         "features_engineered": 23,
         "training_samples": len(ai.feature_df) if ai.feature_df is not None else 0,
+        "models_extended": {
+            "clusterer": {
+                "type": "KMeans",
+                "n_clusters": ai.clusterer.n_clusters if ai.clusterer.is_trained else 0,
+                "silhouette_score": ai.clusterer.silhouette,
+            },
+            "neural_net": {
+                "type": "GRU Neural Network",
+                "architecture": "GRU(input=6, hidden=32) → Dense(1)",
+                "training_mae": ai.neural.train_mae,
+            },
+            "explainability": {
+                "type": "Permutation SHAP",
+                "method": "Per-prediction feature contribution analysis",
+            },
+        },
+        "total_models": 6,
     })
 
 
@@ -464,6 +481,47 @@ def get_ai_dashboard():
     ai = _ensure_ai()
     dashboard = ai.full_dashboard()
     return sanitize_for_json(dashboard)
+
+
+@app.get("/api/ai/neural/{supplier_id}")
+def get_ai_neural(supplier_id: str, horizon: int = 6):
+    """Return GRU neural network forecast."""
+    if supplier_id not in SUPPLIER_IDS:
+        return JSONResponse(status_code=404, content={"error": f"Unknown supplier: {supplier_id}"})
+    ai = _ensure_ai()
+    return sanitize_for_json(ai.neural_forecast(supplier_id, horizon))
+
+
+@app.get("/api/ai/explain/{supplier_id}")
+def get_ai_explain(supplier_id: str):
+    """Return SHAP-style feature explanations for a supplier."""
+    if supplier_id not in SUPPLIER_IDS:
+        return JSONResponse(status_code=404, content={"error": f"Unknown supplier: {supplier_id}"})
+    ai = _ensure_ai()
+    return sanitize_for_json(ai.explain(supplier_id))
+
+
+@app.get("/api/ai/clusters")
+def get_ai_clusters():
+    """Return K-Means supplier clustering results."""
+    ai = _ensure_ai()
+    return sanitize_for_json(ai.cluster_suppliers())
+
+
+@app.get("/api/ai/compare/{supplier_id}")
+def get_ai_compare(supplier_id: str):
+    """Return model comparison (all models head-to-head)."""
+    if supplier_id not in SUPPLIER_IDS:
+        return JSONResponse(status_code=404, content={"error": f"Unknown supplier: {supplier_id}"})
+    ai = _ensure_ai()
+    return sanitize_for_json(ai.compare_models(supplier_id))
+
+
+@app.get("/api/ai/simulate")
+def get_ai_simulate(weeks: int = 1):
+    """Simulate new weeks of data for real-time demo."""
+    ai = _ensure_ai()
+    return sanitize_for_json(ai.simulate_live(weeks))
 
 
 # ---------------------------------------------------------------------------

@@ -3443,8 +3443,17 @@ function renderAIResults(data) {
     // Anomaly Detection
     renderAIAnomalies(data.ai_anomalies);
 
-    // Feature Importances
-    renderAIFeatures(data.ai_forecast.top_features || {});
+    // Neural Network Forecast
+    if (data.ai_neural_forecast) renderAINeuralForecast(data.ai_neural_forecast);
+
+    // Model Comparison
+    if (data.ai_model_comparison) renderAIModelComparison(data.ai_model_comparison);
+
+    // Clustering
+    if (data.ai_cluster) renderAICluster(data.ai_cluster);
+
+    // Setup live simulation button
+    setupAISimulation();
 }
 
 function renderAIRisk(risk) {
@@ -3657,30 +3666,190 @@ function renderAIAnomalies(anomalies) {
     });
 }
 
-function renderAIFeatures(features) {
-    const container = document.getElementById('ai-features-bars');
-    if (!container || !features) return;
+// Fallback demo data in case backend not running
+// ── Neural Network Forecast Chart ──
+let aiNeuralChart = null;
 
-    const entries = Object.entries(features);
-    if (entries.length === 0) return;
+function renderAINeuralForecast(neural) {
+    const canvas = document.getElementById('ai-neural-chart');
+    if (!canvas || !neural) return;
+    if (aiNeuralChart) aiNeuralChart.destroy();
 
-    const maxVal = Math.max(...entries.map(([, v]) => v));
+    aiNeuralChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: (neural.weeks || []).map(w => 'Wk ' + w),
+            datasets: [
+                {
+                    label: 'GRU Neural Net Forecast',
+                    data: neural.expected || [],
+                    borderColor: '#ff6d00', backgroundColor: 'rgba(255, 109, 0, 0.1)',
+                    borderWidth: 3, tension: 0.3, pointRadius: 5, pointBackgroundColor: '#ff6d00',
+                },
+                {
+                    label: 'Upper Bound', data: neural.high || [],
+                    borderColor: 'rgba(255, 109, 0, 0.3)', borderWidth: 1, borderDash: [5, 5],
+                    tension: 0.3, fill: false, pointRadius: 0,
+                },
+                {
+                    label: 'Lower Bound', data: neural.low || [],
+                    borderColor: 'rgba(255, 109, 0, 0.3)', borderWidth: 1, borderDash: [5, 5],
+                    tension: 0.3, fill: '-1', backgroundColor: 'rgba(255, 109, 0, 0.05)', pointRadius: 0,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { color: '#8b86a3', font: { size: 11 } } } },
+            scales: {
+                x: { ticks: { color: '#5a5672' }, grid: { color: 'rgba(124, 92, 252, 0.06)' } },
+                y: { ticks: { color: '#5a5672', callback: v => v + 'd' }, grid: { color: 'rgba(124, 92, 252, 0.06)' } },
+            },
+        },
+    });
+}
 
-    container.innerHTML = entries.map(([name, value]) => {
-        const pct = (value / maxVal * 100).toFixed(0);
-        const displayName = name.replace(/_/g, ' ');
+// ── Model Comparison Chart ──
+let aiCompareChart = null;
+
+function renderAIModelComparison(comp) {
+    const canvas = document.getElementById('ai-compare-chart');
+    const metaDiv = document.getElementById('ai-compare-meta');
+    if (!canvas || !comp || !comp.models) return;
+    if (aiCompareChart) aiCompareChart.destroy();
+
+    const models = comp.models || [];
+    const names = models.map(m => m.name);
+    const maes = models.map(m => m.mae);
+    const colors = models.map(m => m.color || '#7c5cfc');
+
+    aiCompareChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: names,
+            datasets: [{
+                label: 'MAE (days)',
+                data: maes,
+                backgroundColor: colors.map(c => c + '40'),
+                borderColor: colors,
+                borderWidth: 2,
+                borderRadius: 6,
+            }],
+        },
+        options: {
+            responsive: true, indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => `MAE: ${ctx.parsed.x} days` } },
+            },
+            scales: {
+                x: { ticks: { color: '#5a5672', callback: v => v + 'd' }, grid: { color: 'rgba(124, 92, 252, 0.06)' }, title: { display: true, text: 'Mean Absolute Error (lower = better)', color: '#5a5672' } },
+                y: { ticks: { color: '#e8e6f0', font: { weight: '600' } }, grid: { display: false } },
+            },
+        },
+    });
+
+    if (metaDiv) {
+        metaDiv.innerHTML = `
+            <div class="ai-compare-winner">
+                <span class="winner-label">Best Model</span>
+                <span class="winner-value">${comp.best_model || 'N/A'}</span>
+            </div>
+            <div class="ai-compare-winner">
+                <span class="winner-label">Best MAE</span>
+                <span class="winner-value">${comp.best_mae || '?'} days</span>
+            </div>
+            <div class="ai-compare-winner">
+                <span class="winner-label">Improvement Over Baseline</span>
+                <span class="winner-value">${comp.improvement_over_baseline || 0}%</span>
+            </div>`;
+    }
+}
+
+// ── Cluster Rendering ──
+function renderAICluster(cluster) {
+    const container = document.getElementById('ai-cluster-cards');
+    if (!container || !cluster) return;
+
+    // If single supplier cluster, show it; if all, show all
+    const items = cluster.cluster_label ? [cluster] : (cluster.clusters || [cluster]);
+
+    container.innerHTML = items.map(c => `
+        <div class="ai-cluster-card" style="border-left-color:${c.cluster_color || '#5a5672'}">
+            <h4>${c.supplier_name || ''}</h4>
+            <span class="cluster-badge" style="background:${c.cluster_color || '#5a5672'}20;color:${c.cluster_color || '#5a5672'}">${c.cluster_label || 'Unknown'}</span>
+            <p class="cluster-desc">${c.cluster_description || ''}</p>
+            <p class="cluster-action">${c.recommended_action || ''}</p>
+        </div>`).join('');
+}
+
+// ── Live Simulation ──
+function setupAISimulation() {
+    const btn = document.getElementById('ai-simulate-btn');
+    if (!btn || btn._bound) return;
+    btn._bound = true;
+
+    let weekOffset = 1;
+    btn.addEventListener('click', async () => {
+        const status = document.getElementById('ai-live-status');
+        const results = document.getElementById('ai-live-results');
+        if (status) status.textContent = 'Simulating...';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`${API_BASE}/api/ai/simulate?weeks=${weekOffset}`);
+            let data;
+            if (res.ok) {
+                data = await res.json();
+            } else {
+                data = generateFallbackSimulation(weekOffset);
+            }
+            renderSimulationResults(data, results);
+            if (status) status.textContent = `Simulated Week ${data.simulated_week || 53 + weekOffset - 1}`;
+            weekOffset++;
+        } catch (e) {
+            const data = generateFallbackSimulation(weekOffset);
+            renderSimulationResults(data, results);
+            if (status) status.textContent = `Simulated Week ${53 + weekOffset - 1} (demo)`;
+            weekOffset++;
+        }
+        btn.disabled = false;
+    });
+}
+
+function renderSimulationResults(data, container) {
+    if (!container) return;
+    const rows = data.data || [];
+    container.innerHTML = rows.map(r => {
+        const isLate = r.payment_delay_days > (r.contractual_terms_days || 21);
+        const color = r.payment_status === 'critical' ? 'var(--red)' : isLate ? 'var(--amber)' : 'var(--green)';
         return `
-            <div class="ai-feature-row">
-                <span class="ai-feature-name">${displayName}</span>
-                <div class="ai-feature-bar-wrap">
-                    <div class="ai-feature-bar" style="width:${pct}%"></div>
-                </div>
-                <span class="ai-feature-value">${(value * 100).toFixed(1)}%</span>
+            <div class="ai-live-card">
+                <div class="live-name">${r.supplier_name || r.supplier_id}</div>
+                <div class="live-delay" style="color:${color}">${r.payment_delay_days}d</div>
+                <span class="live-status" style="background:${color}20;color:${color}">${r.payment_status || 'unknown'}</span>
             </div>`;
     }).join('');
 }
 
-// Fallback demo data in case backend not running
+function generateFallbackSimulation(offset) {
+    const names = { S1: 'AlphaSteel Corp', S2: 'BetaLogistics Ltd', S3: 'GammaSupplies Co', S4: 'DeltaParts Inc', S5: 'EpsilonServices' };
+    const bases = { S1: 15, S2: 58 + offset * 2, S3: 40 + offset, S4: 45 + offset * 1.5, S5: 14 };
+    const terms = { S1: 15, S2: 21, S3: 14, S4: 21, S5: 7 };
+    return {
+        simulated_week: 52 + offset,
+        data: Object.entries(names).map(([sid, name]) => {
+            const delay = Math.round((bases[sid] + (Math.random() - 0.5) * 4) * 10) / 10;
+            return {
+                supplier_id: sid, supplier_name: name,
+                payment_delay_days: delay, contractual_terms_days: terms[sid],
+                payment_status: delay > terms[sid] + 15 ? 'critical' : delay > terms[sid] ? 'late' : 'on_time',
+                is_simulated: true,
+            };
+        }),
+    };
+}
+
 function getAIFallbackData(supplierId) {
     const supplierNames = { S1: 'AlphaSteel Corp', S2: 'BetaLogistics Ltd', S3: 'GammaSupplies Co', S4: 'DeltaParts Inc', S5: 'EpsilonServices' };
     const name = supplierNames[supplierId] || supplierId;
@@ -3770,6 +3939,44 @@ function getAIFallbackData(supplierId) {
                 weeks: anomalyWeeks,
                 scores: anomalyScores.map(s => Math.round(s * 10) / 10),
             },
+        },
+        ai_neural_forecast: {
+            supplier_id: supplierId, supplier_name: name,
+            weeks: weeks,
+            expected: f.expected.map(v => Math.round((v + (Math.random() - 0.5) * 3) * 10) / 10),
+            low: f.low.map(v => Math.round((v - 2) * 10) / 10),
+            high: f.high.map(v => Math.round((v + 2) * 10) / 10),
+            method: 'gru_neural_network',
+            architecture: 'GRU(input=6, hidden=32) → Dense(1)',
+        },
+        ai_shap: {
+            supplier_id: supplierId, supplier_name: name,
+            base_prediction: f.expected[0],
+            feature_contributions: {
+                delay_max_4w: 0.182, delay_mean_8w: 0.156, trend_slope_6w: 0.143,
+                excess_over_terms: 0.121, cross_supplier_spread: 0.098,
+                delay_std_4w: -0.067, acceleration: 0.054, wow_change: -0.032,
+            },
+            explanation: `For ${name}, the AI predicts ${f.expected[0]} days delay. Increasing factors: peak delay in last 4 weeks, 8-week average delay, upward trend. Decreasing factors: stable recent payments, decelerating pattern.`,
+            method: 'permutation_shap',
+        },
+        ai_cluster: {
+            supplier_id: supplierId, supplier_name: name,
+            cluster_label: f.risk === 'critical' ? 'Critical Deterioration' : f.risk === 'warning' ? 'Volatile & Unpredictable' : 'Stable & Reliable',
+            cluster_color: f.risk === 'critical' ? '#ff1744' : f.risk === 'warning' ? '#ff6d00' : '#00e676',
+            cluster_description: f.risk === 'critical' ? 'Severe delays with accelerating trend. Immediate attention.' : f.risk === 'warning' ? 'High payment variance. Risk of sudden deterioration.' : 'Consistently on-time payments with low variance.',
+            recommended_action: f.risk === 'critical' ? 'Escalate to Credit Committee.' : f.risk === 'warning' ? 'Increase monitoring frequency.' : 'Continue standard monitoring.',
+        },
+        ai_model_comparison: {
+            supplier_id: supplierId, supplier_name: name,
+            models: [
+                { name: 'Gradient Boosting', type: 'ml', mae: 0.5, color: '#7c5cfc', rank: 1 },
+                { name: 'GRU Neural Net', type: 'deep_learning', mae: 1.8, color: '#ff6d00', rank: 2 },
+                { name: 'Holt-Winters', type: 'statistical', mae: 3.2, color: '#00b0ff', rank: 3 },
+                { name: 'Rolling Average', type: 'baseline', mae: 5.1, color: '#5a5672', rank: 4 },
+            ],
+            best_model: 'Gradient Boosting', best_mae: 0.5,
+            improvement_over_baseline: 90.2,
         },
     };
 }
