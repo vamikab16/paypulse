@@ -9,6 +9,14 @@ build/
 
 # Environment
 .env
+.env.local
+.env.*.local
+
+# Credentials & secrets (never commit)
+judges_credentials.txt
+*credentials*.txt
+*.pem
+*.key
 
 # IDE
 .vscode/

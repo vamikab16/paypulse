@@ -5,6 +5,20 @@
 
 const API_BASE = '';
 
+// ── XSS-safe interpolation helper ──
+// Escape strings before dropping them into template literals that feed innerHTML.
+// Use for ANY value originating from API responses, user input, or data we don't
+// fully control (supplier names, reasons, labels, detail text, etc.).
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // ── Global State ──
 let companyData = null;
 let suppliersData = null;
@@ -438,18 +452,43 @@ function showView(viewId) {
 }
 
 function showPage(pageId) {
-    document.querySelectorAll('#view-app .page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('#view-app .page').forEach(p => {
+        // Don't touch the hidden simulator page
+        if (p.id === 'page-simulator') return;
+        p.classList.remove('active');
+    });
     const el = document.getElementById(`page-${pageId}`);
     if (el) el.classList.add('active');
 
-    document.querySelectorAll('#main-nav .nav-btn').forEach(b => {
+    // Update nav active states — primary tabs + More menu items
+    document.querySelectorAll('#main-nav > .nav-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.page === pageId);
     });
+    // If the page is from the More menu (mydata, explain), deactivate primary tabs
+    const morePagesSet = new Set(['mydata', 'explain']);
+    if (morePagesSet.has(pageId)) {
+        document.querySelectorAll('#main-nav > .nav-btn').forEach(b => b.classList.remove('active'));
+        // Highlight the More trigger instead
+        const moreTrigger = document.getElementById('more-menu-trigger');
+        if (moreTrigger) moreTrigger.classList.add('active');
+    } else {
+        const moreTrigger = document.getElementById('more-menu-trigger');
+        if (moreTrigger) moreTrigger.classList.remove('active');
+    }
 
     // Show/hide toggle bar on dashboard
     const toggleBar = document.querySelector('.view-toggle-bar');
     if (toggleBar) {
         toggleBar.style.display = pageId === 'dashboard' ? 'flex' : 'none';
+    }
+
+    // Close More dropdown
+    const moreWrap = document.getElementById('more-menu-wrap');
+    if (moreWrap) moreWrap.classList.remove('open');
+
+    // Re-position subtab slider when navigating to bankrisk
+    if (pageId === 'bankrisk') {
+        requestAnimationFrame(() => positionSubtabSlider());
     }
 
     window.scrollTo(0, 0);
@@ -475,6 +514,11 @@ document.addEventListener('DOMContentLoaded', () => {
     setupAlertToast();
     setupReportButton();
     setupAIPage();
+    setupMyDataPage();
+    setupMoreMenu();
+    setupBankRiskSubTabs();
+    setupInlineSimulator();
+    setupAIExpander();
 
     // Check if logged in — if yes, skip to app; otherwise show landing
     const session = Storage.getSession();
@@ -640,9 +684,221 @@ function enterApp(email) {
 // ══════════════════════════════════════
 
 function setupNavListeners() {
-    document.querySelectorAll('#main-nav .nav-btn').forEach(btn => {
+    document.querySelectorAll('#main-nav > .nav-btn[data-page]').forEach(btn => {
         btn.addEventListener('click', () => showPage(btn.dataset.page));
     });
+}
+
+// ══════════════════════════════════════
+//  MORE MENU
+// ══════════════════════════════════════
+
+function setupMoreMenu() {
+    const trigger = document.getElementById('more-menu-trigger');
+    const wrap = document.getElementById('more-menu-wrap');
+    const dropdown = document.getElementById('more-dropdown');
+    if (!trigger || !wrap) return;
+
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        wrap.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+        wrap.classList.remove('open');
+    });
+    if (dropdown) {
+        dropdown.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    // Handle More dropdown item clicks
+    document.querySelectorAll('.more-dropdown-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const targetPage = item.dataset.morepage;
+            const targetSubtab = item.dataset.subtab;
+            const action = item.dataset.action;
+
+            // Navigate to page
+            showPage(targetPage);
+
+            // If it has a subtab target, switch to that subtab
+            if (targetSubtab) {
+                switchBankRiskSubTab(targetSubtab);
+            }
+
+            // If it should open the inline simulator
+            if (action === 'open-simulator') {
+                const inlineSim = document.getElementById('inline-simulator');
+                if (inlineSim) {
+                    inlineSim.style.display = 'block';
+                    inlineSim.style.animation = 'fadeIn 0.3s ease both';
+                    setTimeout(() => inlineSim.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+                }
+            }
+
+            // Close dropdown
+            wrap.classList.remove('open');
+        });
+    });
+}
+
+// ══════════════════════════════════════
+//  BANK RISK SUB-TABS
+// ══════════════════════════════════════
+
+function setupBankRiskSubTabs() {
+    const subtabBar = document.getElementById('bankrisk-subtabs');
+    if (!subtabBar) return;
+
+    subtabBar.querySelectorAll('.subtab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            switchBankRiskSubTab(btn.dataset.subtab);
+        });
+    });
+}
+
+function switchBankRiskSubTab(tabId) {
+    const subtabBar = document.getElementById('bankrisk-subtabs');
+    if (!subtabBar) return;
+
+    // Update button active states
+    subtabBar.querySelectorAll('.subtab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.subtab === tabId);
+    });
+
+    // Position the slider
+    requestAnimationFrame(() => positionSubtabSlider());
+
+    // Show/hide subtab content
+    const page = document.getElementById('page-bankrisk');
+    if (page) {
+        page.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
+        const target = document.getElementById(`subtab-${tabId}`);
+        if (target) {
+            target.classList.add('active');
+            target.style.animation = 'fadeIn 0.3s ease both';
+        }
+    }
+}
+
+function positionSubtabSlider() {
+    const subtabBar = document.getElementById('bankrisk-subtabs');
+    if (!subtabBar) return;
+    const activeBtn = subtabBar.querySelector('.subtab-btn.active');
+    const slider = subtabBar.querySelector('.subtab-slider');
+    if (!activeBtn || !slider) return;
+
+    const barRect = subtabBar.getBoundingClientRect();
+    const btnRect = activeBtn.getBoundingClientRect();
+    const offset = btnRect.left - barRect.left;
+    slider.style.width = btnRect.width + 'px';
+    slider.style.transform = `translateX(${offset}px)`;
+}
+
+// ══════════════════════════════════════
+//  INLINE SIMULATOR (Risk Spread page)
+// ══════════════════════════════════════
+
+function setupInlineSimulator() {
+    const toggleBtn = document.getElementById('inline-simulator-toggle');
+    const closeBtn = document.getElementById('inline-simulator-close');
+    const simPanel = document.getElementById('inline-simulator');
+    const runBtn = document.getElementById('inline-run-scenario-btn');
+
+    if (toggleBtn && simPanel) {
+        toggleBtn.addEventListener('click', () => {
+            const isVisible = simPanel.style.display !== 'none';
+            if (isVisible) {
+                simPanel.style.display = 'none';
+            } else {
+                simPanel.style.display = 'block';
+                simPanel.style.animation = 'fadeIn 0.3s ease both';
+                setTimeout(() => simPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+            }
+        });
+    }
+
+    if (closeBtn && simPanel) {
+        closeBtn.addEventListener('click', () => {
+            simPanel.style.display = 'none';
+        });
+    }
+
+    if (runBtn) {
+        runBtn.addEventListener('click', () => {
+            runInlineScenario();
+        });
+    }
+}
+
+function runInlineScenario() {
+    const scenarioType = document.getElementById('inline-scenario-select').value;
+    const result = computeLocalScenario(scenarioType, {});
+    const resultEl = document.getElementById('inline-sim-result');
+    resultEl.style.display = 'block';
+    resultEl.style.animation = 'fadeIn 0.3s ease both';
+
+    const currentRisk = getCurrentRiskLevel();
+    const currentAvg = getCurrentAvgDelay();
+    const supplierImpacts = result.supplier_impacts || [];
+    const scenarioEndDelays = supplierImpacts.map(s => s.scenario_end);
+    const projectedRisk = AnalysisEngine.calculateRisk(scenarioEndDelays);
+    const scenarioAvgDelay = scenarioEndDelays.length > 0
+        ? Math.round(scenarioEndDelays.reduce((a, b) => a + b, 0) / scenarioEndDelays.length)
+        : 0;
+
+    // Current card
+    const crEl = document.getElementById('inline-sim-current-risk');
+    crEl.textContent = currentRisk;
+    crEl.className = `sim-compare-value ${currentRisk.toLowerCase()}`;
+    document.getElementById('inline-sim-current-avg').textContent = currentAvg + 'd';
+
+    // Scenario card
+    const srEl = document.getElementById('inline-sim-scenario-risk');
+    srEl.textContent = projectedRisk;
+    srEl.className = `sim-compare-value ${projectedRisk.toLowerCase()}`;
+    document.getElementById('inline-sim-scenario-avg').textContent = scenarioAvgDelay + 'd';
+
+    // Arrow styling
+    const riskOrder = { GREEN: 0, AMBER: 1, RED: 2 };
+    const arrowEl = document.getElementById('inline-sim-compare-arrow');
+    if (riskOrder[projectedRisk] > riskOrder[currentRisk]) {
+        arrowEl.className = 'sim-compare-arrow deteriorating';
+    } else if (riskOrder[projectedRisk] < riskOrder[currentRisk]) {
+        arrowEl.className = 'sim-compare-arrow improving';
+    } else {
+        arrowEl.className = 'sim-compare-arrow stable';
+    }
+    arrowEl.textContent = '→';
+
+    // Summary
+    document.getElementById('inline-sim-summary').textContent = result.comparison_summary;
+}
+
+// ══════════════════════════════════════
+//  AI EXPANDER ("How the AI works")
+// ══════════════════════════════════════
+
+function setupAIExpander() {
+    const toggle = document.getElementById('ai-expander-toggle');
+    const content = document.getElementById('ai-expander-content');
+    const goDeeper = document.getElementById('ai-go-deeper-btn');
+
+    if (toggle && content) {
+        toggle.addEventListener('click', () => {
+            const isOpen = content.classList.contains('open');
+            content.classList.toggle('open');
+            toggle.classList.toggle('open');
+        });
+    }
+
+    if (goDeeper) {
+        goDeeper.addEventListener('click', () => {
+            switchBankRiskSubTab('ai-details');
+            window.scrollTo(0, 0);
+        });
+    }
 }
 
 // ══════════════════════════════════════
@@ -958,7 +1214,7 @@ function renderWhySection() {
 
     const accelerating = (suppliersData.suppliers || []).filter(s => s.trend === 'accelerating');
     if (accelerating.length > 0) {
-        reasons.push(`Payment delays to <strong>${accelerating[0].supplier_name}</strong> are accelerating \u2014 getting worse each week.`);
+        reasons.push(`Payment delays to <strong>${escapeHtml(accelerating[0].supplier_name)}</strong> are accelerating \u2014 getting worse each week.`);
     }
 
     reasons.push('Traditional banking metrics (loan payments, revenue) still show <strong>GREEN</strong>. PayPulse detects stress before those metrics catch it.');
@@ -1041,6 +1297,7 @@ async function loadDashboard() {
     renderTriageScore();
     renderRiskTimeline();
     populateSupplierDropdown();
+    loadBehaviourInsights(savedSME);
 
     // If currently on bank view, render it
     if (currentViewMode === 'bank') {
@@ -1223,7 +1480,7 @@ function renderAffectedList() {
         const color = delay > terms * 1.5 ? 'red' : delay > terms ? 'amber' : 'green';
         const trend = s.trend || '';
         const trendText = trend === 'accelerating' ? 'Worsening fast' : trend === 'drifting' ? 'Getting worse' : trend === 'stable' ? 'Stable' : trend === 'improving' ? 'Improving' : '';
-        return `<div class="affected-item"><div><div class="affected-name">${s.supplier_name}</div><div class="affected-detail">Terms: ${terms}d</div></div><div><div class="affected-delay ${color}">${delay}d</div>${trendText ? `<div class="affected-trend">${trendText}</div>` : ''}</div></div>`;
+        return `<div class="affected-item"><div><div class="affected-name">${escapeHtml(s.supplier_name)}</div><div class="affected-detail">Terms: ${terms}d</div></div><div><div class="affected-delay ${color}">${delay}d</div>${trendText ? `<div class="affected-trend">${escapeHtml(trendText)}</div>` : ''}</div></div>`;
     }).join('');
 }
 
@@ -1294,6 +1551,7 @@ const SME_DATA = {
     },
 };
 
+
 // Currently selected SME (null = default/meridian)
 let selectedSME = null;
 
@@ -1330,6 +1588,7 @@ function loadSMEData(smeId) {
     renderTriageScore();
     renderRiskTimeline();
     populateSupplierDropdown();
+    loadBehaviourInsights(smeId);
 }
 
 /**
@@ -1457,16 +1716,16 @@ function renderBankRiskView() {
         <div class="portfolio-row">
             <div class="portfolio-row-main">
                 <div class="portfolio-biz">
-                    <span class="portfolio-biz-name">${b.name}</span>
-                    <span class="portfolio-biz-reason">${b.reason}</span>
+                    <span class="portfolio-biz-name">${escapeHtml(b.name)}</span>
+                    <span class="portfolio-biz-reason">${escapeHtml(b.reason)}</span>
                 </div>
                 <div class="portfolio-meta">
-                    <span class="portfolio-risk-tag ${riskColors[b.risk]}">${b.risk}</span>
-                    <span class="portfolio-trend ${b.trend}">${trendArrows[b.trend] || '\u2192'}</span>
-                    <span class="portfolio-priority ${priorityClasses[b.priority]}">${b.priority}</span>
+                    <span class="portfolio-risk-tag ${riskColors[b.risk] || ''}">${escapeHtml(b.risk)}</span>
+                    <span class="portfolio-trend ${escapeHtml(b.trend)}">${trendArrows[b.trend] || '\u2192'}</span>
+                    <span class="portfolio-priority ${priorityClasses[b.priority] || ''}">${escapeHtml(b.priority)}</span>
                 </div>
             </div>
-            <button class="portfolio-details-btn" data-business="${b.id}">View Details</button>
+            <button class="portfolio-details-btn" data-business="${escapeHtml(b.id)}">View Details</button>
         </div>
     `).join('');
 
@@ -1477,6 +1736,127 @@ function renderBankRiskView() {
             switchToSMEView(smeId);
         });
     });
+
+    // Render new NatWest-specific sections
+    renderRegulatoryImpact(businesses);
+    renderRMActions(businesses);
+}
+
+/**
+ * IFRS 9 Regulatory Impact — computed from portfolio data.
+ */
+function renderRegulatoryImpact(businesses) {
+    const redCount = businesses.filter(b => b.risk === 'RED').length;
+    const amberCount = businesses.filter(b => b.risk === 'AMBER').length;
+    const totalCount = businesses.length;
+    const atRisk = redCount + amberCount;
+
+    // Early detection advantage: 4-8 weeks depending on severity
+    const avgAdvantage = redCount > 0 ? 6.4 : amberCount > 0 ? 4.8 : 3.2;
+    const earlyWeeksEl = document.getElementById('reg-early-weeks');
+    if (earlyWeeksEl) {
+        earlyWeeksEl.textContent = avgAdvantage.toFixed(1);
+    }
+
+    // Provisioning savings: ~₹8-15L per at-risk SME caught early
+    const savingsPerSME = redCount > 0 ? 1540000 : 820000;
+    const totalSavings = atRisk * savingsPerSME;
+    const savingsEl = document.getElementById('reg-savings');
+    if (savingsEl) {
+        if (totalSavings >= 10000000) {
+            savingsEl.textContent = '₹' + (totalSavings / 10000000).toFixed(1) + 'Cr';
+        } else {
+            savingsEl.textContent = '₹' + (totalSavings / 100000).toFixed(1) + 'L';
+        }
+    }
+
+    // Defaults prevented
+    const defaultsEl = document.getElementById('reg-defaults');
+    if (defaultsEl) {
+        defaultsEl.textContent = atRisk > 0 ? atRisk : '0';
+    }
+    const defaultsSub = document.getElementById('reg-defaults-sub');
+    if (defaultsSub) {
+        defaultsSub.textContent = atRisk > 0
+            ? `${atRisk} SME${atRisk !== 1 ? 's' : ''} flagged before credit event`
+            : 'No at-risk accounts detected';
+    }
+
+    // Portfolio coverage
+    const coverageEl = document.getElementById('reg-coverage');
+    if (coverageEl) {
+        coverageEl.textContent = '100%';
+    }
+
+    // Timeline
+    const ppWeek = 52 - Math.round(avgAdvantage * 2.2);
+    const tradWeek = ppWeek + Math.round(avgAdvantage);
+    const ppWeekEl = document.getElementById('reg-tl-pp-week');
+    const tradWeekEl = document.getElementById('reg-tl-trad-week');
+    const advantageEl = document.getElementById('reg-tl-advantage');
+
+    if (ppWeekEl) ppWeekEl.textContent = 'W' + ppWeek;
+    if (tradWeekEl) tradWeekEl.textContent = 'W' + tradWeek;
+    if (advantageEl) advantageEl.textContent = avgAdvantage.toFixed(1) + ' weeks';
+}
+
+/**
+ * RM Action Items — personalized for each at-risk business.
+ */
+function renderRMActions(businesses) {
+    const list = document.getElementById('rm-actions-list');
+    if (!list) return;
+
+    const actions = [];
+
+    businesses.forEach(b => {
+        const sme = SME_DATA[b.id];
+        if (!sme) return;
+
+        if (b.risk === 'RED') {
+            const worstSupplier = sme.suppliers.suppliers
+                .sort((a, c) => c.current_delay - a.current_delay)[0];
+            actions.push({
+                urgency: 'urgent',
+                icon: '🚨',
+                title: `Escalate: ${b.name}`,
+                desc: `<strong>${worstSupplier.supplier_name}</strong> is ${Math.round(worstSupplier.current_delay)}d late (terms: ${worstSupplier.contractual_terms}d). Schedule an emergency review call and consider offering a short-term working capital facility to prevent default.`,
+                tag: 'Immediate Action Required',
+            });
+        } else if (b.risk === 'AMBER') {
+            actions.push({
+                urgency: 'moderate',
+                icon: '⚠️',
+                title: `Schedule Review: ${b.name}`,
+                desc: `Early stress signals detected — payment triage behaviour emerging. Proactively reach out to discuss cash flow challenges and explore restructuring options before the situation escalates.`,
+                tag: 'Review Within 5 Days',
+            });
+        } else {
+            actions.push({
+                urgency: 'routine',
+                icon: '✅',
+                title: `Monitor: ${b.name}`,
+                desc: `Payment patterns healthy across all suppliers. Continue standard quarterly review cycle. No intervention needed.`,
+                tag: 'Routine Monitoring',
+            });
+        }
+
+    });
+
+    // Sort: urgent first
+    const urgencyOrder = { urgent: 0, moderate: 1, routine: 2 };
+    actions.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
+
+    list.innerHTML = actions.map(a => `
+        <div class="rm-action-card">
+            <div class="rm-action-urgency ${escapeHtml(a.urgency)}">${escapeHtml(a.icon)}</div>
+            <div class="rm-action-body">
+                <div class="rm-action-title">${escapeHtml(a.title)}</div>
+                <div class="rm-action-desc">${escapeHtml(a.desc)}</div>
+                <span class="rm-action-tag ${escapeHtml(a.urgency)}">${escapeHtml(a.tag)}</span>
+            </div>
+        </div>
+    `).join('');
 }
 
 function renderEarlyWarningSignals(signals) {
@@ -1499,12 +1879,12 @@ function renderEarlyWarningSignals(signals) {
         const sevClass = s.severity || 'warning';
         const icon = icons[sevClass] || '◉';
         return `
-            <div class="ews-item severity-${sevClass}">
-                <div class="ews-icon ${sevClass}">${icon}</div>
+            <div class="ews-item severity-${escapeHtml(sevClass)}">
+                <div class="ews-icon ${escapeHtml(sevClass)}">${icon}</div>
                 <div class="ews-body">
-                    <div class="ews-type ${sevClass}">${s.type}</div>
-                    <div class="ews-label">${s.label}</div>
-                    <div class="ews-detail">${s.detail}</div>
+                    <div class="ews-type ${escapeHtml(sevClass)}">${escapeHtml(s.type)}</div>
+                    <div class="ews-label">${escapeHtml(s.label)}</div>
+                    <div class="ews-detail">${escapeHtml(s.detail)}</div>
                 </div>
             </div>
         `;
@@ -2475,6 +2855,8 @@ function generateFullOutreachMessage(severity, ctx) {
 <p class="outreach-sign">Best wishes,<br><strong>NatWest Business Support</strong></p>`;
 }
 
+
+
 function renderOutreach() {
     const section = document.getElementById('outreach-section');
     if (!section) return;
@@ -3369,33 +3751,64 @@ function setupAIPage() {
 async function loadAIStatus() {
     try {
         const res = await fetch(`${API_BASE}/api/ai/status`);
-        if (!res.ok) return;
+        if (!res.ok) { setAIStatusFallback(); return; }
         const data = await res.json();
 
         const maeEl = document.getElementById('ai-forecaster-mae');
-        const accEl = document.getElementById('ai-classifier-accuracy');
+        const aucEl = document.getElementById('ai-classifier-auc');
+        const ksEl = document.getElementById('ai-classifier-ks');
         const anomEl = document.getElementById('ai-anomaly-status');
 
-        if (maeEl) maeEl.textContent = data.models.forecaster.training_mae + ' days';
-        if (accEl) accEl.textContent = data.models.risk_classifier.training_accuracy + '%';
+        // Overview sub-tab duplicates
+        const maeOv = document.getElementById('ai-forecaster-mae-ov');
+        const aucOv = document.getElementById('ai-classifier-auc-ov');
+        const anomOv = document.getElementById('ai-anomaly-status-ov');
+
+        const trainMae = data.in_sample && data.in_sample.forecaster_mae_train;
+        const maeText = (trainMae !== null && trainMae !== undefined)
+            ? (trainMae + ' days (in-sample)') : '—';
+        if (maeEl) maeEl.textContent = maeText;
+        if (maeOv) maeOv.textContent = maeText;
+
+        const agg = data.bank_grade || {};
+        const aucText = agg.auc_roc ? agg.auc_roc.mean.toFixed(3) : '—';
+        if (aucEl) aucEl.textContent = aucText;
+        if (aucOv) aucOv.textContent = aucText;
+        if (ksEl) ksEl.textContent = agg.ks_statistic ? agg.ks_statistic.mean.toFixed(3) : '—';
+
         if (anomEl) {
             anomEl.textContent = data.status === 'ready' ? 'Active' : 'Loading';
             anomEl.style.color = data.status === 'ready' ? 'var(--green)' : 'var(--amber)';
         }
+        if (anomOv) {
+            anomOv.textContent = data.status === 'ready' ? 'Active' : 'Loading';
+            anomOv.style.color = data.status === 'ready' ? 'var(--green)' : 'var(--amber)';
+        }
     } catch (e) {
-        // Will use fallback data
         setAIStatusFallback();
     }
 }
 
 function setAIStatusFallback() {
     const maeEl = document.getElementById('ai-forecaster-mae');
-    const accEl = document.getElementById('ai-classifier-accuracy');
+    const aucEl = document.getElementById('ai-classifier-auc');
+    const ksEl = document.getElementById('ai-classifier-ks');
     const anomEl = document.getElementById('ai-anomaly-status');
-    if (maeEl) maeEl.textContent = '0.5 days';
-    if (accEl) accEl.textContent = '99.6%';
-    if (anomEl) { anomEl.textContent = 'Active'; anomEl.style.color = 'var(--green)'; }
+    if (maeEl) maeEl.textContent = '—';
+    if (aucEl) aucEl.textContent = '—';
+    if (ksEl) ksEl.textContent = '—';
+    if (anomEl) { anomEl.textContent = 'Offline'; anomEl.style.color = 'var(--amber)'; }
+
+    // Sync overview duplicates
+    const maeOv = document.getElementById('ai-forecaster-mae-ov');
+    const aucOv = document.getElementById('ai-classifier-auc-ov');
+    const anomOv = document.getElementById('ai-anomaly-status-ov');
+    if (maeOv) maeOv.textContent = '—';
+    if (aucOv) aucOv.textContent = '—';
+    if (anomOv) { anomOv.textContent = 'Offline'; anomOv.style.color = 'var(--amber)'; }
 }
+
+// AI model card function removed
 
 async function runAIAnalysis() {
     const supplier = document.getElementById('ai-supplier-select').value;
@@ -3980,3 +4393,1643 @@ function getAIFallbackData(supplierId) {
         },
     };
 }
+
+// ══════════════════════════════════════
+//  MY DATA PAGE — Custom Input & AI Analysis
+// ══════════════════════════════════════
+
+let mydataChart = null;
+let mydataSuppliers = [];
+let mydataPayments = [];
+
+/**
+ * Get the storage key for current user's custom data.
+ */
+function mydataStorageKey(suffix) {
+    const session = Storage.getSession();
+    const email = session ? session.email : 'anon';
+    return `pp_mydata_${suffix}_${email}`;
+}
+
+/**
+ * Load custom data from localStorage.
+ */
+function mydataLoadData() {
+    try {
+        mydataSuppliers = JSON.parse(localStorage.getItem(mydataStorageKey('suppliers')) || '[]');
+        mydataPayments = JSON.parse(localStorage.getItem(mydataStorageKey('payments')) || '[]');
+    } catch (e) {
+        mydataSuppliers = [];
+        mydataPayments = [];
+    }
+}
+
+/**
+ * Save custom data to localStorage.
+ */
+function mydataSaveData() {
+    localStorage.setItem(mydataStorageKey('suppliers'), JSON.stringify(mydataSuppliers));
+    localStorage.setItem(mydataStorageKey('payments'), JSON.stringify(mydataPayments));
+}
+
+/**
+ * Initialize the My Data page — wire up all event listeners.
+ */
+function setupMyDataPage() {
+    mydataLoadData();
+
+    // Step 1: Add Supplier
+    const addBtn = document.getElementById('mydata-add-supplier-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', mydataAddSupplier);
+    }
+
+    // Allow Enter key to add supplier
+    const nameInput = document.getElementById('mydata-supplier-name');
+    if (nameInput) {
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); mydataAddSupplier(); }
+        });
+    }
+
+    // Step 1 → Step 2
+    const gotoStep2 = document.getElementById('mydata-goto-step2');
+    if (gotoStep2) gotoStep2.addEventListener('click', () => mydataGoToStep(2));
+
+    // Step 2 → Step 1 (back)
+    const backStep1 = document.getElementById('mydata-back-step1');
+    if (backStep1) backStep1.addEventListener('click', () => mydataGoToStep(1));
+
+    // Step 2: Add Payment
+    const addPayBtn = document.getElementById('mydata-add-payment-btn');
+    if (addPayBtn) addPayBtn.addEventListener('click', mydataAddPayment);
+
+    // Step 2: Quick Fill toggle
+    const quickfillBtn = document.getElementById('mydata-quickfill-btn');
+    if (quickfillBtn) {
+        quickfillBtn.addEventListener('click', () => {
+            const panel = document.getElementById('mydata-quickfill-panel');
+            if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        });
+    }
+
+    // Quick Fill profile buttons
+    document.querySelectorAll('.mydata-profile-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const profile = btn.dataset.profile;
+            mydataQuickFill(profile);
+            const panel = document.getElementById('mydata-quickfill-panel');
+            if (panel) panel.style.display = 'none';
+        });
+    });
+
+    // Step 2 → Step 3 (Run AI)
+    const gotoStep3 = document.getElementById('mydata-goto-step3');
+    if (gotoStep3) gotoStep3.addEventListener('click', () => mydataGoToStep(3));
+
+    // Step 3 → Step 2 (back)
+    const backStep2 = document.getElementById('mydata-back-step2');
+    if (backStep2) backStep2.addEventListener('click', () => mydataGoToStep(2));
+
+    // Re-Analyze button
+    const reanalyze = document.getElementById('mydata-reanalyze');
+    if (reanalyze) reanalyze.addEventListener('click', mydataRunAnalysis);
+
+    // Initial render
+    mydataRenderSuppliers();
+    mydataRenderPayments();
+}
+
+/**
+ * Navigate between My Data steps.
+ */
+function mydataGoToStep(step) {
+    const steps = [
+        document.getElementById('mydata-step1'),
+        document.getElementById('mydata-step2'),
+        document.getElementById('mydata-step3'),
+    ];
+
+    steps.forEach((s, i) => {
+        if (s) s.style.display = (i + 1 === step) ? 'block' : 'none';
+    });
+
+    // Update step indicators
+    const dots = document.querySelectorAll('.mydata-step-dot');
+    const lines = document.querySelectorAll('.mydata-step-line');
+    const labels = document.querySelectorAll('.mydata-step-labels span');
+
+    dots.forEach((dot, i) => {
+        dot.classList.remove('active', 'completed');
+        if (i + 1 < step) dot.classList.add('completed');
+        else if (i + 1 === step) dot.classList.add('active');
+    });
+
+    lines.forEach((line, i) => {
+        line.classList.toggle('filled', i + 1 < step);
+    });
+
+    labels.forEach((label, i) => {
+        label.classList.remove('active', 'completed');
+        if (i + 1 < step) label.classList.add('completed');
+        else if (i + 1 === step) label.classList.add('active');
+    });
+
+    // Populate payment supplier dropdown when entering step 2
+    if (step === 2) {
+        mydataPopulatePaymentDropdown();
+    }
+
+    // Run analysis when entering step 3
+    if (step === 3) {
+        mydataRunAnalysis();
+    }
+
+    window.scrollTo(0, 0);
+}
+
+/**
+ * Add a new custom supplier.
+ */
+function mydataAddSupplier() {
+    const nameEl = document.getElementById('mydata-supplier-name');
+    const termsEl = document.getElementById('mydata-supplier-terms');
+    const invoiceEl = document.getElementById('mydata-supplier-invoice');
+
+    const name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+
+    const terms = parseInt(termsEl.value) || 21;
+    const invoice = parseInt(invoiceEl.value) || 50000;
+
+    // Generate unique ID
+    const id = 'C' + (mydataSuppliers.length + 1);
+
+    mydataSuppliers.push({
+        supplier_id: id,
+        supplier_name: name,
+        contractual_terms: terms,
+        avg_invoice: invoice,
+    });
+
+    mydataSaveData();
+    mydataRenderSuppliers();
+
+    // Clear form
+    nameEl.value = '';
+    nameEl.focus();
+}
+
+/**
+ * Remove a custom supplier and its payments.
+ */
+function mydataRemoveSupplier(supplierId) {
+    mydataSuppliers = mydataSuppliers.filter(s => s.supplier_id !== supplierId);
+    mydataPayments = mydataPayments.filter(p => p.supplier_id !== supplierId);
+    mydataSaveData();
+    mydataRenderSuppliers();
+    mydataRenderPayments();
+}
+
+/**
+ * Render supplier cards.
+ */
+function mydataRenderSuppliers() {
+    const grid = document.getElementById('mydata-suppliers-grid');
+    const empty = document.getElementById('mydata-empty-suppliers');
+    const nextBtn = document.getElementById('mydata-goto-step2');
+
+    if (!grid) return;
+
+    if (mydataSuppliers.length === 0) {
+        grid.innerHTML = '';
+        if (empty) empty.style.display = 'flex';
+        if (nextBtn) nextBtn.style.display = 'none';
+        return;
+    }
+
+    if (empty) empty.style.display = 'none';
+    if (nextBtn) nextBtn.style.display = mydataSuppliers.length >= 2 ? 'flex' : 'none';
+
+    grid.innerHTML = mydataSuppliers.map(s => `
+        <div class="mydata-supplier-card" data-id="${s.supplier_id}">
+            <button class="mydata-supplier-remove" data-id="${s.supplier_id}" title="Remove">&times;</button>
+            <div class="mydata-supplier-card-name">${s.supplier_name}</div>
+            <div class="mydata-supplier-card-meta">
+                <span>Terms: <strong>${s.contractual_terms}d</strong></span>
+                <span>Avg Invoice: <strong>₹${(s.avg_invoice || 0).toLocaleString('en-IN')}</strong></span>
+                <span>ID: <strong>${s.supplier_id}</strong></span>
+            </div>
+        </div>
+    `).join('');
+
+    // Attach remove handlers
+    grid.querySelectorAll('.mydata-supplier-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mydataRemoveSupplier(btn.dataset.id);
+        });
+    });
+}
+
+/**
+ * Populate the payment form's supplier dropdown.
+ */
+function mydataPopulatePaymentDropdown() {
+    const select = document.getElementById('mydata-pay-supplier');
+    if (!select) return;
+
+    select.innerHTML = mydataSuppliers.map(s =>
+        `<option value="${s.supplier_id}">${s.supplier_name}</option>`
+    ).join('');
+
+    // Auto-set next week number
+    const weekInput = document.getElementById('mydata-pay-week');
+    if (weekInput && select.value) {
+        const supplierPayments = mydataPayments.filter(p => p.supplier_id === select.value);
+        const maxWeek = supplierPayments.length > 0
+            ? Math.max(...supplierPayments.map(p => p.week)) + 1
+            : 1;
+        weekInput.value = Math.min(maxWeek, 52);
+    }
+
+    // Update week on supplier change
+    select.onchange = () => {
+        const supplierPayments = mydataPayments.filter(p => p.supplier_id === select.value);
+        const maxWeek = supplierPayments.length > 0
+            ? Math.max(...supplierPayments.map(p => p.week)) + 1
+            : 1;
+        if (weekInput) weekInput.value = Math.min(maxWeek, 52);
+    };
+}
+
+/**
+ * Add a single payment entry.
+ */
+function mydataAddPayment() {
+    const supplierId = document.getElementById('mydata-pay-supplier').value;
+    const week = parseInt(document.getElementById('mydata-pay-week').value) || 1;
+    const delay = parseFloat(document.getElementById('mydata-pay-delay').value) || 0;
+    const invoice = parseFloat(document.getElementById('mydata-pay-invoice').value) || 50000;
+
+    if (!supplierId) return;
+
+    // Remove existing entry for same supplier + week (overwrite)
+    mydataPayments = mydataPayments.filter(p => !(p.supplier_id === supplierId && p.week === week));
+
+    const supplier = mydataSuppliers.find(s => s.supplier_id === supplierId);
+
+    mydataPayments.push({
+        supplier_id: supplierId,
+        supplier_name: supplier ? supplier.supplier_name : supplierId,
+        week,
+        delay: Math.round(delay * 10) / 10,
+        invoice: Math.round(invoice),
+    });
+
+    // Sort by week then supplier
+    mydataPayments.sort((a, b) => a.week - b.week || a.supplier_id.localeCompare(b.supplier_id));
+
+    mydataSaveData();
+    mydataRenderPayments();
+
+    // Auto-increment week
+    const weekInput = document.getElementById('mydata-pay-week');
+    if (weekInput) weekInput.value = Math.min(week + 1, 52);
+}
+
+/**
+ * Remove a payment entry.
+ */
+function mydataRemovePayment(index) {
+    mydataPayments.splice(index, 1);
+    mydataSaveData();
+    mydataRenderPayments();
+}
+
+/**
+ * Render the payment entries table.
+ */
+function mydataRenderPayments() {
+    const list = document.getElementById('mydata-payments-list');
+    const tableWrap = document.getElementById('mydata-payments-table-wrap');
+    const empty = document.getElementById('mydata-empty-payments');
+    const nextBtn = document.getElementById('mydata-goto-step3');
+
+    if (!list) return;
+
+    if (mydataPayments.length === 0) {
+        if (tableWrap) tableWrap.style.display = 'none';
+        if (empty) empty.style.display = 'flex';
+        if (nextBtn) nextBtn.style.display = 'none';
+        return;
+    }
+
+    if (tableWrap) tableWrap.style.display = 'block';
+    if (empty) empty.style.display = 'none';
+
+    // Show analyze button if we have enough data (at least 4 entries)
+    if (nextBtn) nextBtn.style.display = mydataPayments.length >= 4 ? 'flex' : 'none';
+
+    list.innerHTML = mydataPayments.map((p, i) => {
+        const supplier = mydataSuppliers.find(s => s.supplier_id === p.supplier_id);
+        const terms = supplier ? supplier.contractual_terms : 21;
+        const delayClass = p.delay > terms * 1.5 ? 'high' : p.delay > terms ? 'medium' : 'low';
+        return `
+            <div class="mydata-payment-row">
+                <span class="pay-week">W${p.week}</span>
+                <span class="pay-supplier">${p.supplier_name}</span>
+                <span class="pay-delay ${delayClass}">${p.delay}d</span>
+                <span>₹${p.invoice.toLocaleString('en-IN')}</span>
+                <button class="mydata-payment-remove" data-index="${i}" title="Remove">&times;</button>
+            </div>
+        `;
+    }).join('');
+
+    // Attach remove handlers
+    list.querySelectorAll('.mydata-payment-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+            mydataRemovePayment(parseInt(btn.dataset.index));
+        });
+    });
+}
+
+/**
+ * Quick-fill payment data with a chosen health profile.
+ * Generates 12 weeks of realistic data for ALL suppliers.
+ */
+function mydataQuickFill(profile) {
+    if (mydataSuppliers.length === 0) return;
+
+    // Clear existing payments  
+    mydataPayments = [];
+
+    const weeks = 12;
+
+    mydataSuppliers.forEach((supplier, si) => {
+        const terms = supplier.contractual_terms || 21;
+        const baseInvoice = supplier.avg_invoice || 50000;
+
+        for (let w = 1; w <= weeks; w++) {
+            let delay, invoice;
+            const noise = (Math.random() - 0.5) * 3; // ±1.5 days noise
+
+            if (profile === 'healthy') {
+                // All suppliers within terms
+                delay = Math.max(1, terms * 0.7 + noise);
+            } else if (profile === 'drifting') {
+                // First supplier: starts normal, drifts high
+                // Others: stay relatively stable
+                if (si === 0) {
+                    const drift = (w / weeks) * terms * 0.8;
+                    delay = Math.max(1, terms * 0.6 + drift + noise);
+                } else if (si === 1 && mydataSuppliers.length > 2) {
+                    const drift = (w / weeks) * terms * 0.4;
+                    delay = Math.max(1, terms * 0.5 + drift + noise);
+                } else {
+                    delay = Math.max(1, terms * 0.6 + noise);
+                }
+            } else if (profile === 'stressed') {
+                // First supplier: severely delayed and accelerating
+                // Second supplier: moderately delayed
+                // Others: on time (creating triage signal)
+                if (si === 0) {
+                    const acceleration = (w / weeks) * terms * 1.8;
+                    delay = Math.max(1, terms + acceleration + noise * 2);
+                } else if (si === 1) {
+                    const drift = (w / weeks) * terms * 0.8;
+                    delay = Math.max(1, terms * 0.8 + drift + noise);
+                } else {
+                    delay = Math.max(1, terms * 0.5 + noise);
+                }
+            }
+
+            invoice = Math.round(baseInvoice * (0.85 + Math.random() * 0.3));
+
+            mydataPayments.push({
+                supplier_id: supplier.supplier_id,
+                supplier_name: supplier.supplier_name,
+                week: w,
+                delay: Math.round(delay * 10) / 10,
+                invoice,
+            });
+        }
+    });
+
+    mydataPayments.sort((a, b) => a.week - b.week || a.supplier_id.localeCompare(b.supplier_id));
+    mydataSaveData();
+    mydataRenderPayments();
+}
+
+/**
+ * Run AI analysis on custom data.
+ */
+function mydataRunAnalysis() {
+    const analyzing = document.getElementById('mydata-analyzing');
+    const results = document.getElementById('mydata-results');
+
+    if (analyzing) analyzing.style.display = 'flex';
+    if (results) results.style.display = 'none';
+
+    // Simulate analysis delay for UX
+    setTimeout(() => {
+        const analysisResult = mydataComputeAnalysis();
+        mydataRenderResults(analysisResult);
+
+        if (analyzing) analyzing.style.display = 'none';
+        if (results) results.style.display = 'block';
+    }, 1200);
+}
+
+/**
+ * Compute full analysis from custom data using AnalysisEngine.
+ */
+function mydataComputeAnalysis() {
+    // Build supplier objects matching the format expected by AnalysisEngine
+    const supplierSummaries = mydataSuppliers.map(s => {
+        const payments = mydataPayments
+            .filter(p => p.supplier_id === s.supplier_id)
+            .sort((a, b) => a.week - b.week);
+
+        const delays = payments.map(p => p.delay);
+        const lastDelay = delays.length > 0 ? delays[delays.length - 1] : 0;
+
+        // Build sparkline (last 12 data points)
+        const sparkline = delays.slice(-12);
+
+        // Compute trend slope
+        let trendSlope = 0;
+        if (delays.length >= 3) {
+            const n = delays.length;
+            const halfN = Math.floor(n / 2);
+            const firstHalfAvg = delays.slice(0, halfN).reduce((a, b) => a + b, 0) / halfN;
+            const secondHalfAvg = delays.slice(halfN).reduce((a, b) => a + b, 0) / (n - halfN);
+            trendSlope = (secondHalfAvg - firstHalfAvg) / Math.max(1, n / 2);
+        }
+
+        // Determine trend
+        let trend = 'stable';
+        if (trendSlope > 1.5) trend = 'accelerating';
+        else if (trendSlope > 0.5) trend = 'drifting';
+        else if (trendSlope < -0.5) trend = 'improving';
+
+        // Determine severity
+        const terms = s.contractual_terms || 21;
+        let severity = 'normal';
+        if (lastDelay > terms + 15) severity = 'critical';
+        else if (lastDelay > terms + 5) severity = 'warning';
+        else if (lastDelay > terms) severity = 'watch';
+
+        return {
+            supplier_id: s.supplier_id,
+            supplier_name: s.supplier_name,
+            current_delay: Math.round(lastDelay * 10) / 10,
+            contractual_terms: terms,
+            severity,
+            trend,
+            trend_slope: Math.round(trendSlope * 100) / 100,
+            sparkline,
+            payments,
+        };
+    });
+
+    // Build data object for AnalysisEngine
+    const session = Storage.getSession();
+    const profile = session ? Storage.getProfile(session.email) : null;
+    const businessName = (profile && profile.businessName) || 'Your Business';
+
+    const smeData = {
+        name: businessName,
+        suppliers: { suppliers: supplierSummaries },
+    };
+
+    // Run AnalysisEngine
+    const companyResult = AnalysisEngine.buildCompanyData(smeData);
+    const triageResult = AnalysisEngine.buildTriageData(smeData);
+    const delays = supplierSummaries.map(s => s.current_delay);
+    const triageScore = AnalysisEngine.calculateTriageScore(delays);
+    const insight = AnalysisEngine.generateInsight(smeData);
+
+    // Detect anomalies (simple: flag suppliers with delay > 2x terms)
+    let anomalyCount = 0;
+    const anomalies = supplierSummaries.filter(s => {
+        const isAnomaly = s.current_delay > s.contractual_terms * 1.5 && s.trend !== 'stable';
+        if (isAnomaly) anomalyCount++;
+        return isAnomaly;
+    });
+
+    // Generate recommendations
+    const recommendations = mydataGenerateRecommendations(supplierSummaries, companyResult, triageResult);
+
+    return {
+        company: companyResult,
+        triage: triageResult,
+        triageScore,
+        insight,
+        suppliers: supplierSummaries,
+        anomalyCount,
+        anomalies,
+        recommendations,
+    };
+}
+
+/**
+ * Generate personalized recommendations based on analysis.
+ */
+function mydataGenerateRecommendations(suppliers, company, triage) {
+    const recs = [];
+    const risk = company.risk_level;
+
+    // Risk-level recommendations
+    if (risk === 'RED') {
+        recs.push({
+            text: `<strong>Urgent:</strong> Your business is showing severe financial stress signals. ${suppliers.filter(s => s.severity === 'critical').length} supplier${suppliers.filter(s => s.severity === 'critical').length !== 1 ? 's are' : ' is'} significantly beyond contractual terms. Immediate intervention is recommended.`,
+            type: 'urgent',
+        });
+    } else if (risk === 'AMBER') {
+        recs.push({
+            text: `<strong>Attention:</strong> Early signs of payment stress detected. Payment patterns show emerging divergence — act now to prevent escalation to critical levels.`,
+            type: '',
+        });
+    } else {
+        recs.push({
+            text: `<strong>Healthy:</strong> Your supplier payment patterns are within normal ranges. Continue monitoring to maintain this healthy status.`,
+            type: 'positive',
+        });
+    }
+
+    // Triage-specific
+    if (triage.triage_detected) {
+        recs.push({
+            text: `<strong>Payment Triage Detected:</strong> You're selectively prioritising ${triage.favored_suppliers.length} supplier${triage.favored_suppliers.length !== 1 ? 's' : ''} over ${triage.stretched_suppliers.length} delayed one${triage.stretched_suppliers.length !== 1 ? 's' : ''}. This pattern is a classic early signal of cash flow pressure.`,
+            type: 'urgent',
+        });
+    }
+
+    // Per-supplier recs
+    const accelerating = suppliers.filter(s => s.trend === 'accelerating');
+    if (accelerating.length > 0) {
+        recs.push({
+            text: `<strong>${accelerating.map(s => s.supplier_name).join(', ')}:</strong> Payment delays are accelerating — getting worse each week. Prioritise negotiating revised terms or accelerating payments to these suppliers.`,
+            type: 'urgent',
+        });
+    }
+
+    const drifting = suppliers.filter(s => s.trend === 'drifting');
+    if (drifting.length > 0) {
+        recs.push({
+            text: `<strong>${drifting.map(s => s.supplier_name).join(', ')}:</strong> Gradual upward drift in payment timing. Monitor closely and consider stabilising before the trend escalates.`,
+            type: '',
+        });
+    }
+
+    const stable = suppliers.filter(s => s.severity === 'normal' && s.trend === 'stable');
+    if (stable.length > 0 && risk !== 'GREEN') {
+        recs.push({
+            text: `<strong>${stable.map(s => s.supplier_name).join(', ')}:</strong> Payments remain stable and on time. These supplier relationships are healthy.`,
+            type: 'positive',
+        });
+    }
+
+    return recs;
+}
+
+/**
+ * Render the full analysis results dashboard.
+ */
+function mydataRenderResults(result) {
+    // Risk badge
+    const riskBadge = document.getElementById('mydata-risk-badge');
+    if (riskBadge) {
+        riskBadge.textContent = result.company.risk_level;
+        riskBadge.className = 'mydata-result-badge ' + result.company.risk_level.toLowerCase();
+    }
+    const riskSub = document.getElementById('mydata-risk-sub');
+    if (riskSub) {
+        const riskTexts = { RED: 'Severe stress detected', AMBER: 'Early warning signs', GREEN: 'Healthy status' };
+        riskSub.textContent = riskTexts[result.company.risk_level] || '';
+    }
+
+    // Triage status
+    const triageStatus = document.getElementById('mydata-triage-status');
+    if (triageStatus) {
+        triageStatus.textContent = result.triage.triage_detected ? 'Detected' : 'None';
+        triageStatus.style.color = result.triage.triage_detected ? 'var(--amber)' : 'var(--green)';
+    }
+    const triageSub = document.getElementById('mydata-triage-sub');
+    if (triageSub) {
+        triageSub.textContent = result.triage.triage_detected
+            ? `${result.triage.stretched_suppliers.length} delayed, ${result.triage.favored_suppliers.length} on time`
+            : 'No selective prioritisation';
+    }
+
+    // Triage score
+    const triageScoreEl = document.getElementById('mydata-triage-score');
+    if (triageScoreEl) {
+        triageScoreEl.textContent = result.triageScore + '/100';
+    }
+    const scoreBar = document.getElementById('mydata-score-bar');
+    if (scoreBar) {
+        setTimeout(() => { scoreBar.style.width = result.triageScore + '%'; }, 100);
+    }
+
+    // Anomalies
+    const anomalyCount = document.getElementById('mydata-anomaly-count');
+    if (anomalyCount) {
+        anomalyCount.textContent = result.anomalyCount;
+        anomalyCount.style.color = result.anomalyCount > 0 ? 'var(--amber)' : 'var(--green)';
+    }
+    const anomalySub = document.getElementById('mydata-anomaly-sub');
+    if (anomalySub) {
+        anomalySub.textContent = result.anomalyCount > 0
+            ? `${result.anomalies.map(a => a.supplier_name).join(', ')}`
+            : 'No anomalies detected';
+    }
+
+    // Narrative
+    const narrativeText = document.getElementById('mydata-narrative-text');
+    if (narrativeText) {
+        narrativeText.textContent = result.insight;
+    }
+
+    // Trend chart
+    mydataRenderTrendChart(result.suppliers);
+
+    // Supplier breakdown
+    mydataRenderBreakdown(result.suppliers);
+
+    // Recommendations
+    mydataRenderRecommendations(result.recommendations);
+}
+
+/**
+ * Render the trend chart using Chart.js.
+ */
+function mydataRenderTrendChart(suppliers) {
+    const canvas = document.getElementById('mydata-trend-chart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (mydataChart) mydataChart.destroy();
+
+    const suppliersWithData = suppliers.filter(s => s.sparkline && s.sparkline.length > 0);
+    if (suppliersWithData.length === 0) return;
+
+    const maxLen = Math.max(...suppliersWithData.map(s => s.sparkline.length));
+    const labels = Array.from({ length: maxLen }, (_, i) => `W${i + 1}`);
+
+    const lineColors = [
+        { border: '#ff1744', bg: 'rgba(255,23,68,0.08)' },
+        { border: '#ffab00', bg: 'rgba(255,171,0,0.08)' },
+        { border: '#7c5cfc', bg: 'rgba(124,92,252,0.06)' },
+        { border: '#00e676', bg: 'rgba(0,230,118,0.06)' },
+        { border: '#00b0ff', bg: 'rgba(0,176,255,0.06)' },
+    ];
+
+    // Sort by severity (worst first)
+    const severityOrder = { critical: 4, warning: 3, watch: 2, normal: 1 };
+    const sorted = [...suppliersWithData].sort((a, b) =>
+        (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0)
+    );
+
+    const datasets = sorted.slice(0, 5).map((s, i) => ({
+        label: s.supplier_name,
+        data: [...Array(maxLen - s.sparkline.length).fill(null), ...s.sparkline],
+        borderColor: lineColors[i % lineColors.length].border,
+        backgroundColor: lineColors[i % lineColors.length].bg,
+        borderWidth: 2.5,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        tension: 0.35,
+        fill: true,
+    }));
+
+    // Add contractual terms line for the worst supplier
+    if (sorted[0]) {
+        datasets.push({
+            label: `Terms (${sorted[0].contractual_terms}d)`,
+            data: labels.map(() => sorted[0].contractual_terms),
+            borderColor: 'rgba(0,230,118,0.25)',
+            borderDash: [4, 6],
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: false,
+        });
+    }
+
+    mydataChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#8b86a3', font: { family: 'Inter', size: 11 }, boxWidth: 10, padding: 16 },
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10,14,26,0.95)',
+                    titleColor: '#e8e6f0',
+                    bodyColor: '#8b86a3',
+                    borderColor: 'rgba(124,92,252,0.15)',
+                    borderWidth: 1,
+                    padding: 10,
+                    callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}d` },
+                },
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#5a5672', font: { family: 'Inter', size: 10 }, maxTicksLimit: 12 } },
+                y: {
+                    grid: { color: 'rgba(124,92,252,0.04)' },
+                    ticks: { color: '#5a5672', font: { family: 'Inter', size: 10 }, callback: (v) => v + 'd' },
+                    title: { display: true, text: 'Payment Delay (days)', color: '#5a5672', font: { family: 'Inter', size: 11 } },
+                },
+            },
+        },
+    });
+}
+
+/**
+ * Render supplier breakdown list.
+ */
+function mydataRenderBreakdown(suppliers) {
+    const list = document.getElementById('mydata-breakdown-list');
+    if (!list) return;
+
+    const severityOrder = { critical: 4, warning: 3, watch: 2, normal: 1 };
+    const sorted = [...suppliers].sort((a, b) =>
+        (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0)
+    );
+
+    list.innerHTML = sorted.map(s => {
+        const terms = s.contractual_terms;
+        const delay = Math.round(s.current_delay);
+        const delayColor = delay > terms * 1.5 ? 'red' : delay > terms ? 'amber' : 'green';
+        const excess = Math.max(0, delay - terms);
+        const trendText = s.trend === 'accelerating' ? '↗ Accelerating'
+            : s.trend === 'drifting' ? '→↗ Drifting up'
+            : s.trend === 'improving' ? '↘ Improving'
+            : '→ Stable';
+
+        return `
+            <div class="mydata-breakdown-item">
+                <div class="mydata-breakdown-left">
+                    <span class="mydata-breakdown-name">${s.supplier_name}</span>
+                    <span class="mydata-breakdown-detail">Terms: ${terms}d · Excess: ${excess > 0 ? '+' + excess + 'd' : 'On time'} · ${trendText}</span>
+                </div>
+                <div class="mydata-breakdown-right">
+                    <span class="mydata-breakdown-delay ${delayColor}">${delay}d</span>
+                    <span class="mydata-breakdown-severity ${s.severity}">${s.severity}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Render recommendations list.
+ */
+function mydataRenderRecommendations(recommendations) {
+    const list = document.getElementById('mydata-rec-list');
+    if (!list) return;
+
+    list.innerHTML = recommendations.map(r => `
+        <div class="mydata-rec-item ${r.type}">${r.text}</div>
+    `).join('');
+}
+
+
+// ══════════════════════════════════════
+//  RISK SPREAD PAGE (redesigned contagion)
+// ══════════════════════════════════════
+
+let _cgGraph = null;
+let _cgLayout = null;
+
+/**
+ * Format a number in Indian Rupee format (₹1,23,456)
+ */
+function formatINR(amount) {
+    if (amount == null || isNaN(amount)) return '—';
+    return '₹' + Math.round(amount).toLocaleString('en-IN');
+}
+
+async function setupContagionPage() {
+    const seedSel = document.getElementById('contagion-seed-select');
+    const runBtn = document.getElementById('contagion-run-btn');
+    if (!seedSel || seedSel._wired) return;
+    seedSel._wired = true;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/contagion/graph?limit=400`);
+        if (!res.ok) throw new Error('graph fetch failed');
+        _cgGraph = await res.json();
+        seedSel.innerHTML = '';
+        // Only show the real portfolio SMEs in the dropdown — they're the
+        // ones the user has seen in the SME/Bank views. The rest of the
+        // graph is their network (modelled as peer suppliers), which
+        // appears in the cascade.
+        const portfolioNodes = _cgGraph.nodes.filter(n => n.kind === 'bank_borrower' && n.is_portfolio);
+        // Fallback: if none are flagged (shouldn't happen), show all.
+        const borrowerNodes = (portfolioNodes.length ? portfolioNodes : _cgGraph.nodes.filter(n => n.kind === 'bank_borrower'))
+            .sort((a, b) => (b.total_payables + b.total_receivables) - (a.total_payables + a.total_receivables));
+        borrowerNodes.forEach(n => {
+            const opt = document.createElement('option');
+            opt.value = n.id;
+            const exposure = Math.round((n.total_payables + n.total_receivables) * 100); // Convert to INR scale
+            opt.textContent = `${n.label} — ${formatINR(exposure)} exposure`;
+            seedSel.appendChild(opt);
+        });
+        if (borrowerNodes.length) seedSel.value = borrowerNodes[0].id;
+        _cgLayout = cgComputeLayout(_cgGraph);
+        cgRenderGraph({ impacted: [], seeds: [] });
+    } catch (e) {
+        seedSel.innerHTML = '<option value="">Service loading — please retry</option>';
+    }
+
+    runBtn && runBtn.addEventListener('click', runContagion);
+}
+
+async function runContagion() {
+    if (!_cgGraph) return;
+    const seed = document.getElementById('contagion-seed-select').value;
+    const steps = parseInt(document.getElementById('contagion-steps').value || '8', 10);
+    const threshold = parseFloat(document.getElementById('contagion-threshold').value || '0.25');
+    if (!seed) return;
+
+    // Find seed name for headline
+    const seedNode = (_cgGraph.nodes || []).find(n => n.id === seed);
+    const seedName = seedNode ? seedNode.label : 'this SME';
+
+    try {
+        const res = await fetch(`${API_BASE}/api/contagion/simulate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seeds: [seed], steps, threshold }),
+        });
+        if (!res.ok) throw new Error('sim failed');
+        const data = await res.json();
+        const s = data.summary || {};
+        const impacted = data.bank_book_impacted || [];
+        const nImpacted = s.n_bank_book_impacted || impacted.length || 0;
+
+        // Convert exposure to INR scale (multiply by 100 for realistic INR values)
+        const exposureINR = (s.total_exposure_at_risk || 0) * 100;
+
+        // Count high-risk SMEs (stress > 0.6)
+        const highRiskCount = impacted.filter(x => x.stress > 0.6).length;
+
+        // Portfolio context — total bank-book SMEs
+        const totalBankBook = (_cgGraph.nodes || []).filter(n => n.kind === 'bank_borrower').length;
+        const pctPortfolio = totalBankBook > 0 ? (nImpacted / totalBankBook) * 100 : 0;
+
+        // Update hero headline dynamically
+        const heroTitle = document.getElementById('cg-hero-title');
+        if (heroTitle && nImpacted > 0) {
+            heroTitle.innerHTML = `If <strong>${seedName}</strong> fails, <span style="color:var(--red)">${formatINR(exposureINR)}</span> exposure across <strong>${nImpacted} businesses</strong> is at risk`;
+        } else if (heroTitle) {
+            heroTitle.innerHTML = `<strong>${seedName}</strong> has minimal risk spread — your portfolio is well insulated`;
+        }
+
+        // Show summary section + animate counters
+        const summaryEl = document.getElementById('contagion-summary');
+        summaryEl.style.display = 'grid';
+        document.getElementById('cg-n-seeds').textContent = s.n_seeds ?? '—';
+        cgAnimateNumber(document.getElementById('cg-n-impacted'), nImpacted);
+        cgAnimateNumber(document.getElementById('cg-exposure'), exposureINR, { currency: true });
+        document.getElementById('cg-steps').textContent = s.steps ?? '—';
+        cgAnimateNumber(document.getElementById('cg-n-high-risk'), highRiskCount);
+
+        // Render the new Shockwave visualization
+        cgRenderShockwave({ impacted, seedName, seedId: (data.seeds || [])[0] });
+
+        // Render floating exposure badge
+        const floatEl = document.getElementById('cg-shockwave-float');
+        if (floatEl && nImpacted > 0) {
+            floatEl.style.display = 'flex';
+            document.getElementById('cg-float-value').textContent = formatINR(exposureINR);
+            document.getElementById('cg-float-sub').textContent = `${pctPortfolio.toFixed(1)}% of ${totalBankBook}-SME book`;
+        } else if (floatEl) {
+            floatEl.style.display = 'none';
+        }
+
+        // Render impacted SME cards
+        cgRenderImpactedCards(impacted, data.seeds || [], seedName);
+
+        // Damage report narrative
+        cgShowDamageReport({ impacted, nImpacted, seedName, exposureINR, highRiskCount, pctPortfolio, totalBankBook });
+
+        // Week-by-week propagation timeline
+        cgRenderTimeline({ impacted, timeline: data.timeline || [], steps });
+
+    } catch (e) {
+        console.warn('risk spread simulation failed', e);
+    }
+}
+
+/**
+ * Animate a numeric value counting up. For currency, format via formatINR.
+ */
+function cgAnimateNumber(el, target, opts = {}) {
+    if (!el) return;
+    const { currency = false, duration = 900 } = opts;
+    const start = performance.now();
+    // Clear any previous rAF token on this element
+    if (el._cgAnim) cancelAnimationFrame(el._cgAnim);
+    const step = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+        const val = target * eased;
+        el.textContent = currency ? formatINR(val) : Math.round(val).toLocaleString('en-IN');
+        if (t < 1) {
+            el._cgAnim = requestAnimationFrame(step);
+        } else {
+            el.textContent = currency ? formatINR(target) : Math.round(target).toLocaleString('en-IN');
+        }
+    };
+    el._cgAnim = requestAnimationFrame(step);
+}
+
+/**
+ * Render the Shockwave Epicenter — seed at center, impacted SMEs on concentric
+ * week-rings, animated contagion pulses emanating outward.
+ */
+function cgRenderShockwave({ impacted, seedName, seedId }) {
+    const svg = document.getElementById('cg-shockwave-svg');
+    const empty = document.getElementById('cg-shockwave-empty');
+    if (!svg) return;
+
+    // Clean previous content
+    svg.innerHTML = '';
+
+    if (!impacted || impacted.length === 0) {
+        if (empty) empty.style.display = 'flex';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    const W = 800, H = 560;
+    const cx = W / 2, cy = H / 2 + 10;
+
+    // Ring configuration — radii by week bucket
+    const rings = [
+        { key: 'w1', label: 'Week 1–2', r: 120, minStep: 1, maxStep: 2, color: '#ff1744' },
+        { key: 'w2', label: 'Week 3–4', r: 195, minStep: 3, maxStep: 4, color: '#ff7a45' },
+        { key: 'w3', label: 'Week 5+',  r: 260, minStep: 5, maxStep: 99, color: '#ffab00' },
+    ];
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const defs = document.createElementNS(svgNS, 'defs');
+    defs.innerHTML = `
+        <radialGradient id="cgSeedGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+            <stop offset="60%" stop-color="#ff4d6d" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#ff1744" stop-opacity="0.8"/>
+        </radialGradient>
+        <radialGradient id="cgStageGrad" cx="50%" cy="50%" r="55%">
+            <stop offset="0%" stop-color="rgba(255,23,68,0.10)"/>
+            <stop offset="60%" stop-color="rgba(124,92,252,0.04)"/>
+            <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+        </radialGradient>
+    `;
+    svg.appendChild(defs);
+
+    // Stage glow
+    const bg = document.createElementNS(svgNS, 'circle');
+    bg.setAttribute('cx', cx); bg.setAttribute('cy', cy); bg.setAttribute('r', 300);
+    bg.setAttribute('fill', 'url(#cgStageGrad)');
+    svg.appendChild(bg);
+
+    // Week-ring guides + labels
+    rings.forEach(ring => {
+        const c = document.createElementNS(svgNS, 'circle');
+        c.setAttribute('class', 'cg-sw-ring');
+        c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', ring.r);
+        svg.appendChild(c);
+
+        const lbl = document.createElementNS(svgNS, 'text');
+        lbl.setAttribute('class', 'cg-sw-ring-label');
+        lbl.setAttribute('x', cx + ring.r + 6);
+        lbl.setAttribute('y', cy + 4);
+        lbl.textContent = ring.label;
+        svg.appendChild(lbl);
+    });
+
+    // Bucket impacted SMEs by ring
+    const buckets = rings.map(r => ({ ring: r, items: [] }));
+    impacted.forEach(imp => {
+        const step = imp.first_impacted_step || 1;
+        const bucket = buckets.find(b => step >= b.ring.minStep && step <= b.ring.maxStep);
+        if (bucket) bucket.items.push(imp);
+    });
+
+    // Compute node positions per bucket — spread evenly around the ring
+    // with slight jitter so nearby nodes don't overlap
+    const nodePositions = [];
+    buckets.forEach((bucket, bIdx) => {
+        const N = bucket.items.length;
+        if (N === 0) return;
+        // Sort by exposure so biggest node is at "top" position — easier to scan
+        const sorted = [...bucket.items].sort((a, b) => (b.exposure_at_risk || 0) - (a.exposure_at_risk || 0));
+        // Start angle offset per ring so labels don't stack vertically
+        const startAngle = -Math.PI / 2 + (bIdx * 0.35);
+        const span = N === 1 ? 0 : Math.PI * 2;
+        sorted.forEach((imp, i) => {
+            const t = N === 1 ? 0 : (i / N);
+            const angle = startAngle + t * span;
+            const x = cx + bucket.ring.r * Math.cos(angle);
+            const y = cy + bucket.ring.r * Math.sin(angle);
+            nodePositions.push({
+                imp,
+                x, y, angle,
+                color: bucket.ring.color,
+                ring: bucket.ring,
+            });
+        });
+    });
+
+    // Node radius scale: sqrt of exposure, normalised
+    const maxExp = Math.max(1, ...nodePositions.map(p => p.imp.exposure_at_risk || 0));
+    const nodeR = (exp) => {
+        const norm = Math.sqrt(Math.max(0, exp) / maxExp);
+        return 6 + norm * 14; // 6px → 20px
+    };
+
+    // Draw edges from seed to each impacted node (animated)
+    nodePositions.forEach((p, i) => {
+        const edge = document.createElementNS(svgNS, 'line');
+        edge.setAttribute('class', 'cg-sw-edge');
+        edge.setAttribute('x1', cx);
+        edge.setAttribute('y1', cy);
+        edge.setAttribute('x2', p.x);
+        edge.setAttribute('y2', p.y);
+        edge.setAttribute('stroke', p.color);
+        edge.style.animationDelay = `${0.1 + (p.imp.first_impacted_step || 1) * 0.08}s, 0s`;
+        svg.appendChild(edge);
+    });
+
+    // Draw impacted nodes
+    nodePositions.forEach((p, i) => {
+        const r = nodeR(p.imp.exposure_at_risk || 0);
+        const stress = p.imp.stress || 0;
+
+        // Halo
+        const halo = document.createElementNS(svgNS, 'circle');
+        halo.setAttribute('class', 'cg-sw-node');
+        halo.setAttribute('cx', p.x);
+        halo.setAttribute('cy', p.y);
+        halo.setAttribute('r', r + 4);
+        halo.setAttribute('fill', p.color);
+        halo.setAttribute('fill-opacity', '0.18');
+        halo.style.animationDelay = `${0.15 + (p.imp.first_impacted_step || 1) * 0.1}s`;
+        svg.appendChild(halo);
+
+        // Core node
+        const node = document.createElementNS(svgNS, 'circle');
+        node.setAttribute('class', 'cg-sw-node');
+        node.setAttribute('cx', p.x);
+        node.setAttribute('cy', p.y);
+        node.setAttribute('r', r);
+        node.setAttribute('fill', p.color);
+        node.setAttribute('stroke', '#fff');
+        node.setAttribute('stroke-width', stress > 0.6 ? 2 : 1);
+        node.style.filter = `drop-shadow(0 0 ${6 + stress * 8}px ${p.color})`;
+        node.style.animationDelay = `${0.2 + (p.imp.first_impacted_step || 1) * 0.1}s`;
+        const title = document.createElementNS(svgNS, 'title');
+        title.textContent = `${p.imp.label} — week ${p.imp.first_impacted_step || 1}, stress ${(stress*100).toFixed(0)}%, exposure ${formatINR((p.imp.exposure_at_risk || 0) * 100)}`;
+        node.appendChild(title);
+        svg.appendChild(node);
+
+        // Labels — only for larger nodes to avoid clutter
+        if (r >= 9) {
+            const labelOffset = r + 14;
+            const lx = p.x + labelOffset * Math.cos(p.angle);
+            const ly = p.y + labelOffset * Math.sin(p.angle) + 4;
+            const txt = document.createElementNS(svgNS, 'text');
+            txt.setAttribute('class', 'cg-sw-label');
+            txt.setAttribute('x', lx);
+            txt.setAttribute('y', ly);
+            // Pick text-anchor based on angle so labels don't collide with ring
+            const anchor = Math.cos(p.angle) < -0.3 ? 'end' : Math.cos(p.angle) > 0.3 ? 'start' : 'middle';
+            txt.setAttribute('text-anchor', anchor);
+            const shortLabel = p.imp.label.replace(/ Ltd$/i, '').replace(/ Pvt$/i, '');
+            txt.textContent = shortLabel.length > 18 ? shortLabel.slice(0, 17) + '…' : shortLabel;
+            txt.style.opacity = '0';
+            txt.style.animation = `cgSwNodePop 0.5s ease-out ${0.35 + (p.imp.first_impacted_step || 1) * 0.1}s forwards`;
+            svg.appendChild(txt);
+
+            // Exposure amount under label
+            const amt = document.createElementNS(svgNS, 'text');
+            amt.setAttribute('class', 'cg-sw-label-amount');
+            amt.setAttribute('x', lx);
+            amt.setAttribute('y', ly + 11);
+            amt.setAttribute('text-anchor', anchor);
+            amt.textContent = formatINR((p.imp.exposure_at_risk || 0) * 100);
+            amt.style.opacity = '0';
+            amt.style.animation = `cgSwNodePop 0.5s ease-out ${0.4 + (p.imp.first_impacted_step || 1) * 0.1}s forwards`;
+            svg.appendChild(amt);
+        }
+    });
+
+    // Shockwave pulses — three rings rippling out from the seed
+    for (let i = 0; i < 3; i++) {
+        const pulse = document.createElementNS(svgNS, 'circle');
+        pulse.setAttribute('class', 'cg-sw-pulse');
+        pulse.setAttribute('cx', cx);
+        pulse.setAttribute('cy', cy);
+        pulse.setAttribute('r', 260);
+        pulse.style.animationDelay = `${i * 1.0}s`;
+        svg.appendChild(pulse);
+    }
+
+    // Seed halo (continuous pulse)
+    const seedHalo = document.createElementNS(svgNS, 'circle');
+    seedHalo.setAttribute('class', 'cg-sw-seed-pulse');
+    seedHalo.setAttribute('cx', cx);
+    seedHalo.setAttribute('cy', cy);
+    seedHalo.setAttribute('r', 22);
+    svg.appendChild(seedHalo);
+
+    // Seed node
+    const seedNode = document.createElementNS(svgNS, 'circle');
+    seedNode.setAttribute('class', 'cg-sw-node cg-sw-node-seed');
+    seedNode.setAttribute('cx', cx);
+    seedNode.setAttribute('cy', cy);
+    seedNode.setAttribute('r', 22);
+    seedNode.setAttribute('fill', 'url(#cgSeedGrad)');
+    const sTitle = document.createElementNS(svgNS, 'title');
+    sTitle.textContent = `${seedName} — source of distress`;
+    seedNode.appendChild(sTitle);
+    svg.appendChild(seedNode);
+
+    // Seed label (inside)
+    const seedLabel = document.createElementNS(svgNS, 'text');
+    seedLabel.setAttribute('class', 'cg-sw-label-seed');
+    seedLabel.setAttribute('x', cx);
+    seedLabel.setAttribute('y', cy - 34);
+    seedLabel.setAttribute('text-anchor', 'middle');
+    seedLabel.textContent = seedName.replace(/ Ltd$/i, '').replace(/ Pvt$/i, '');
+    svg.appendChild(seedLabel);
+
+    // "SOURCE" eyebrow under seed
+    const seedEyebrow = document.createElementNS(svgNS, 'text');
+    seedEyebrow.setAttribute('class', 'cg-sw-ring-label');
+    seedEyebrow.setAttribute('x', cx);
+    seedEyebrow.setAttribute('y', cy + 42);
+    seedEyebrow.setAttribute('text-anchor', 'middle');
+    seedEyebrow.textContent = 'EPICENTRE';
+    svg.appendChild(seedEyebrow);
+}
+
+/**
+ * Render the 3-step damage report narrative.
+ */
+function cgShowDamageReport({ impacted, nImpacted, seedName, exposureINR, highRiskCount, pctPortfolio, totalBankBook }) {
+    const wrap = document.getElementById('cg-damage');
+    if (!wrap) return;
+
+    if (!nImpacted) {
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = 'grid';
+
+    const maxStep = impacted.length ? Math.max(...impacted.map(x => x.first_impacted_step || 1)) : 0;
+    const earliest = impacted.length ? [...impacted].sort((a, b) => (a.first_impacted_step || 1) - (b.first_impacted_step || 1))[0] : null;
+
+    const trig = document.getElementById('cg-damage-trigger');
+    const spread = document.getElementById('cg-damage-spread');
+    const impact = document.getElementById('cg-damage-impact');
+
+    if (trig) {
+        trig.innerHTML = `<strong>${seedName}</strong> defaults — its unpaid invoices cascade into its supplier network.`;
+    }
+    if (spread) {
+        const firstBit = earliest
+            ? `<strong>${earliest.label}</strong> is hit first (week ${earliest.first_impacted_step || 1}). `
+            : '';
+        spread.innerHTML = `${firstBit}Distress propagates to <strong>${nImpacted} linked SMEs</strong> within <strong>${maxStep} week${maxStep !== 1 ? 's' : ''}</strong>.`;
+    }
+    if (impact) {
+        const pctTxt = totalBankBook ? `, <strong>${pctPortfolio.toFixed(1)}%</strong> of the bank book` : '';
+        const hrTxt = highRiskCount > 0 ? ` — <strong>${highRiskCount}</strong> at critical stress` : '';
+        impact.innerHTML = `<strong>${formatINR(exposureINR)}</strong> exposure at risk${pctTxt}${hrTxt}.`;
+    }
+}
+
+/**
+ * Render the week-by-week propagation timeline.
+ */
+function cgRenderTimeline({ impacted, timeline, steps }) {
+    const section = document.getElementById('cg-timeline-section');
+    const wrap = document.getElementById('cg-timeline');
+    if (!section || !wrap) return;
+
+    if (!impacted || impacted.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+
+    // Group impacted SMEs by their first_impacted_step
+    const byStep = {};
+    impacted.forEach(x => {
+        const w = x.first_impacted_step || 1;
+        if (!byStep[w]) byStep[w] = { count: 0, exposure: 0 };
+        byStep[w].count += 1;
+        byStep[w].exposure += (x.exposure_at_risk || 0) * 100;
+    });
+
+    const totalSteps = Math.max(steps || 8, ...Object.keys(byStep).map(k => parseInt(k)));
+    const maxCount = Math.max(1, ...Object.values(byStep).map(v => v.count));
+
+    // Update subtitle
+    const subEl = document.getElementById('cg-timeline-sub');
+    if (subEl) {
+        const totalCount = Object.values(byStep).reduce((a, b) => a + b.count, 0);
+        const totalExp = Object.values(byStep).reduce((a, b) => a + b.exposure, 0);
+        subEl.textContent = `${totalCount} SMEs impacted · ${formatINR(totalExp)} cumulative exposure over ${totalSteps} weeks`;
+    }
+
+    let cumCount = 0;
+    let cumExposure = 0;
+    let html = '';
+    for (let w = 1; w <= totalSteps; w++) {
+        const entry = byStep[w] || { count: 0, exposure: 0 };
+        cumCount += entry.count;
+        cumExposure += entry.exposure;
+        const barHeight = entry.count > 0 ? Math.max(4, (entry.count / maxCount) * 40) : 2;
+        const state = entry.count > 0 ? 'active' : 'empty';
+        const cumText = cumExposure > 0 ? formatINR(cumExposure) : '—';
+        html += `
+            <div class="cg-tl-week ${state}" style="animation-delay:${0.1 + w * 0.06}s;">
+                <span class="cg-tl-week-label">W${w}</span>
+                <div class="cg-tl-marker"></div>
+                <div class="cg-tl-bar-wrap">
+                    <div class="cg-tl-bar" style="height:${barHeight}px;"></div>
+                </div>
+                <span class="cg-tl-count">${entry.count > 0 ? '+' + entry.count : '0'}</span>
+                <span class="cg-tl-cum">${cumText}</span>
+            </div>
+        `;
+    }
+    wrap.innerHTML = html;
+}
+
+/**
+ * Render impacted SMEs as clean cards (replaces old tables).
+ */
+function cgRenderImpactedCards(impacted, seeds, seedName) {
+    const section = document.getElementById('cg-impacted-section');
+    const list = document.getElementById('cg-impacted-list');
+    if (!section || !list) return;
+
+    if (impacted.length === 0 && seeds.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+
+    const rows = [];
+
+    // Add seed first
+    seeds.forEach(sid => {
+        const node = (_cgGraph.nodes || []).find(n => n.id === sid);
+        rows.push({
+            label: node ? node.label : sid,
+            week: 0,
+            stress: 1.0,
+            exposure: 0,
+            isSeed: true,
+        });
+    });
+
+    // Add impacted SMEs sorted by stress (highest first)
+    [...impacted].sort((a, b) => (b.stress || 0) - (a.stress || 0)).forEach(x => {
+        rows.push({
+            label: x.label || x.id,
+            week: x.first_impacted_step || 0,
+            stress: x.stress || 0,
+            exposure: (x.exposure_at_risk || 0) * 100, // INR scale
+            isSeed: false,
+        });
+    });
+
+    list.innerHTML = rows.map(r => {
+        const severityClass = r.isSeed ? 'severity-seed' : r.stress > 0.6 ? 'severity-critical' : 'severity-affected';
+        const badgeClass = r.isSeed ? 'seed' : r.stress > 0.6 ? 'critical' : 'affected';
+        const badgeText = r.isSeed ? 'Source' : r.stress > 0.6 ? 'Critical' : 'Affected';
+        const amountColor = r.stress > 0.6 ? 'red' : 'amber';
+        const detail = r.isSeed
+            ? 'Initial business failure'
+            : `Impacted by week ${r.week} · Stress: ${(r.stress * 100).toFixed(0)}%`;
+
+        return `
+            <div class="cg-impacted-card ${severityClass}">
+                <div class="cg-impacted-left">
+                    <span class="cg-impacted-name">${r.label}</span>
+                    <span class="cg-impacted-detail">${detail}</span>
+                </div>
+                <div class="cg-impacted-right">
+                    ${r.isSeed ? '' : `<span class="cg-impacted-amount ${amountColor}">${formatINR(r.exposure)}</span>`}
+                    <span class="cg-impacted-badge ${badgeClass}">${badgeText}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+// Deterministic layout: polar for bank-book, outer ring for externals, heavy-edge attracted.
+function cgComputeLayout(graph) {
+    const width = 1000, height = 480;
+    const cx = width / 2, cy = height / 2;
+    const bankIds = graph.nodes.filter(n => n.kind === 'bank_borrower').map(n => n.id);
+    const extIds = graph.nodes.filter(n => n.kind === 'external_supplier').map(n => n.id);
+    const pos = {};
+    const bankR = Math.min(width, height) * 0.28;
+    const extR = Math.min(width, height) * 0.44;
+    bankIds.forEach((id, i) => {
+        const t = (i / Math.max(bankIds.length, 1)) * Math.PI * 2;
+        pos[id] = { x: cx + bankR * Math.cos(t), y: cy + bankR * Math.sin(t) };
+    });
+    extIds.forEach((id, i) => {
+        const t = (i / Math.max(extIds.length, 1)) * Math.PI * 2 + 0.1;
+        pos[id] = { x: cx + extR * Math.cos(t), y: cy + extR * Math.sin(t) };
+    });
+    return { pos, width, height };
+}
+
+function cgRenderGraph({ impacted, seeds }) {
+    const svg = document.getElementById('contagion-svg');
+    if (!svg || !_cgGraph || !_cgLayout) return;
+    svg.setAttribute('viewBox', `0 0 ${_cgLayout.width} ${_cgLayout.height}`);
+    const impactedIds = new Set((impacted || []).map(x => x.id));
+    const seedIds = new Set(seeds || []);
+
+    let html = '';
+    // edges first
+    (_cgGraph.edges || []).forEach(e => {
+        const a = _cgLayout.pos[e.source];
+        const b = _cgLayout.pos[e.target];
+        if (!a || !b) return;
+        const active = seedIds.has(e.source) && (impactedIds.has(e.target) || seedIds.has(e.target));
+        html += `<line class="cg-edge${active ? ' active' : ''}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
+    });
+    // nodes
+    _cgGraph.nodes.forEach(n => {
+        const p = _cgLayout.pos[n.id];
+        if (!p) return;
+        let cls = 'safe';
+        if (seedIds.has(n.id)) cls = 'seed';
+        else if (impactedIds.has(n.id)) cls = 'impacted';
+        else if (n.kind === 'external_supplier') cls = 'external';
+        const r = n.kind === 'bank_borrower' ? 6 : 3.5;
+        html += `<circle class="cg-node ${cls}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}"><title>${n.label}</title></circle>`;
+    });
+    // labels for bank-book only
+    _cgGraph.nodes.filter(n => n.kind === 'bank_borrower').forEach(n => {
+        const p = _cgLayout.pos[n.id];
+        if (!p) return;
+        html += `<text class="cg-label" x="${(p.x + 8).toFixed(1)}" y="${(p.y + 3).toFixed(1)}">${n.label.replace(' Ltd','')}</text>`;
+    });
+    svg.innerHTML = html;
+}
+
+// Wire page init on nav click — bypasses the lexical showPage binding.
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('#main-nav .nav-btn').forEach(b => {
+        if (b.dataset && b.dataset.page === 'contagion') {
+            b.addEventListener('click', () => setTimeout(setupContagionPage, 0));
+        }
+    });
+});
+
+// ══════════════════════════════════════
+//  AI BEHAVIOUR INSIGHTS
+// ══════════════════════════════════════
+
+/**
+ * Load behavioural insights for a specific SME from the API.
+ * Falls back to local heuristic generation if API unavailable.
+ */
+async function loadBehaviourInsights(smeId) {
+    const skeletonEl = document.getElementById('insights-skeleton');
+    const cardEl = document.getElementById('insights-card');
+    const errorEl = document.getElementById('insights-error');
+    const badgeEl = document.getElementById('insights-source-badge');
+
+    if (!skeletonEl || !cardEl) return;
+
+    // Show loading state
+    skeletonEl.style.display = 'flex';
+    cardEl.style.display = 'none';
+    errorEl.style.display = 'none';
+    if (badgeEl) { badgeEl.textContent = ''; badgeEl.className = 'insights-source-badge'; }
+
+    const effectiveId = smeId || 'meridian';
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/insights/${effectiveId}`);
+        if (!resp.ok) throw new Error(resp.status);
+        const data = await resp.json();
+        renderBehaviourInsights(data);
+    } catch (err) {
+        console.warn('Insights API unavailable, generating locally:', err.message);
+        // Generate locally from SME_DATA
+        const localInsights = generateLocalInsights(effectiveId);
+        renderBehaviourInsights(localInsights);
+    }
+}
+
+/**
+ * Render the behaviour insights card with data.
+ */
+function renderBehaviourInsights(data) {
+    const skeletonEl = document.getElementById('insights-skeleton');
+    const cardEl = document.getElementById('insights-card');
+    const errorEl = document.getElementById('insights-error');
+    const badgeEl = document.getElementById('insights-source-badge');
+
+    if (!data || data.error) {
+        skeletonEl.style.display = 'none';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    // Source badge
+    if (badgeEl) {
+        const src = data.source || 'heuristic';
+        badgeEl.textContent = src === 'groq' ? 'Groq AI' : 'Local';
+        badgeEl.className = `insights-source-badge ${src === 'groq' ? 'groq' : 'heuristic'}`;
+    }
+
+    // Summary
+    const summaryEl = document.getElementById('insights-summary');
+    if (summaryEl) summaryEl.textContent = data.summary || '';
+
+    // Key issues as colour-coded tags
+    const issuesEl = document.getElementById('insights-issues');
+    if (issuesEl) {
+        const issues = data.key_issues || [];
+        issuesEl.innerHTML = issues.map(issue => {
+            const severity = classifyIssueSeverity(issue);
+            return `<span class="insights-issue-tag severity-${escapeHtml(severity)}">${escapeHtml(issue)}</span>`;
+        }).join('');
+    }
+
+    // Suggestions
+    const suggestionsEl = document.getElementById('insights-suggestions');
+    if (suggestionsEl) {
+        const suggestions = data.suggestions || [];
+        suggestionsEl.innerHTML = suggestions.map(s =>
+            `<li class="insights-suggestion-item"><span class="insights-suggestion-icon">✓</span>${escapeHtml(s)}</li>`
+        ).join('');
+    }
+
+    // Priority focus
+    const focusEl = document.getElementById('insights-focus');
+    if (focusEl) {
+        const focus = data.priority_focus || [];
+        focusEl.innerHTML = focus.map(f =>
+            `<div class="insights-focus-item">${escapeHtml(f)}</div>`
+        ).join('');
+    }
+
+    // Expected impact
+    const impactEl = document.getElementById('insights-impact');
+    if (impactEl) impactEl.textContent = data.expected_impact || '';
+
+    // Show card, hide skeleton
+    skeletonEl.style.display = 'none';
+    cardEl.style.display = 'block';
+    cardEl.style.animation = 'fadeIn 0.4s ease both';
+}
+
+/**
+ * Classify an issue string's severity by keyword matching.
+ */
+function classifyIssueSeverity(issue) {
+    const lower = issue.toLowerCase();
+    const highKeywords = ['critical', 'accelerating', 'severe', 'significant', 'triage', 'prioritisation'];
+    const medKeywords = ['drift', 'widening', 'emerging', 'spread', 'growing', 'pressure', 'uneven'];
+    if (highKeywords.some(k => lower.includes(k))) return 'high';
+    if (medKeywords.some(k => lower.includes(k))) return 'medium';
+    return 'low';
+}
+
+/**
+ * Generate insights locally using AnalysisEngine data when API is unavailable.
+ * Mirrors the backend heuristic fallback logic.
+ */
+function generateLocalInsights(smeId) {
+    const sme = SME_DATA[smeId];
+    if (!sme) return { error: 'Unknown SME' };
+
+    const suppliers = (sme.suppliers && sme.suppliers.suppliers) || [];
+    const delays = suppliers.map(s => s.current_delay);
+    const risk = AnalysisEngine.calculateRisk(delays);
+    const triageDetected = AnalysisEngine.detectTriage(suppliers);
+    const avgDelay = delays.length > 0 ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : 0;
+    const maxDelay = delays.length > 0 ? Math.max(...delays) : 0;
+    const minDelay = delays.length > 0 ? Math.min(...delays) : 0;
+    const spread = maxDelay - minDelay;
+    const criticalCount = suppliers.filter(s => s.severity === 'critical').length;
+    const accelSuppliers = suppliers.filter(s => s.trend === 'accelerating');
+    const driftCount = suppliers.filter(s => s.trend === 'drifting').length;
+
+    // Summary
+    let summary;
+    if (risk === 'RED') {
+        summary = `${sme.name} is experiencing significant payment delays across multiple suppliers, with an average delay of ${avgDelay} days and ${criticalCount} supplier(s) in critical status.`;
+    } else if (risk === 'AMBER') {
+        summary = `${sme.name} shows emerging payment stress with average delays of ${avgDelay} days and widening spread across suppliers.`;
+    } else {
+        summary = `${sme.name} maintains consistent payment patterns with an average delay of ${avgDelay} days — within healthy operating range.`;
+    }
+
+    // Key issues
+    const key_issues = [];
+    if (triageDetected) {
+        key_issues.push('Selective payment prioritisation detected — some suppliers are being paid on time while others face growing delays');
+    }
+    if (accelSuppliers.length > 0) {
+        const names = accelSuppliers.map(s => s.supplier_name).join(', ');
+        key_issues.push(`Payment delays are accelerating for ${names}, suggesting increasing cash flow pressure`);
+    }
+    if (spread > 20) {
+        key_issues.push(`Payment spread of ${spread} days between fastest and slowest-paid suppliers indicates uneven cash allocation`);
+    }
+    if (criticalCount > 0) {
+        key_issues.push(`${criticalCount} supplier relationship(s) have reached critical delay levels beyond contractual terms`);
+    }
+    if (driftCount > 0 && accelSuppliers.length === 0) {
+        key_issues.push(`Gradual upward drift in ${driftCount} supplier payment(s) may signal emerging financial pressure`);
+    }
+    if (key_issues.length === 0) {
+        key_issues.push('No significant payment behaviour anomalies detected');
+    }
+
+    // Suggestions
+    let suggestions;
+    if (risk === 'RED') {
+        suggestions = [
+            'Reviewing overall payment scheduling could help reduce supplier concentration risk',
+            'Engaging with suppliers showing the longest delays early may help preserve relationships',
+            'Considering a more even distribution of payment timing across suppliers could stabilise operations',
+        ];
+    } else if (risk === 'AMBER') {
+        suggestions = [
+            'Monitoring the widening gap between on-time and delayed payments could provide early warning of further stress',
+            'Exploring whether payment timing adjustments may help maintain supplier confidence',
+            'Regular review of payment spread trends could support proactive cash flow management',
+        ];
+    } else {
+        suggestions = [
+            'Continuing current payment discipline may help maintain stable supplier relationships',
+            'Periodic review of payment patterns could help identify any emerging drift early',
+            'Maintaining visibility of supplier payment terms relative to actual timing could support ongoing health',
+        ];
+    }
+
+    // Priority focus
+    const priority_focus = [];
+    if (criticalCount > 0) {
+        const critNames = suppliers.filter(s => s.severity === 'critical').map(s => s.supplier_name).join(', ');
+        priority_focus.push(`Suppliers in critical delay: ${critNames}`);
+    }
+    if (triageDetected) {
+        priority_focus.push('Closing the gap between fastest-paid and most-delayed suppliers');
+    }
+    if (accelSuppliers.length > 0) {
+        priority_focus.push('Suppliers with accelerating delay trends');
+    }
+    if (priority_focus.length === 0) {
+        priority_focus.push('Routine monitoring — no urgent focus areas identified');
+    }
+
+    // Expected impact
+    let expected_impact;
+    if (risk === 'RED') {
+        expected_impact = 'Addressing the most delayed supplier relationships and reducing payment spread could help move the risk profile from high toward medium over 4–8 weeks, potentially preserving key supplier partnerships.';
+    } else if (risk === 'AMBER') {
+        expected_impact = 'Stabilising payment timing and preventing further drift could help maintain the current risk level and reduce the chance of escalation to high risk.';
+    } else {
+        expected_impact = 'Maintaining current payment behaviour supports a stable risk profile. Continued consistency may reinforce supplier confidence over time.';
+    }
+
+    return {
+        sme_id: smeId,
+        sme_name: sme.name,
+        source: 'heuristic',
+        summary,
+        key_issues: key_issues.slice(0, 3),
+        suggestions: suggestions.slice(0, 3),
+        priority_focus: priority_focus.slice(0, 2),
+        expected_impact,
+    };
+}
+

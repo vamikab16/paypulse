@@ -22,12 +22,19 @@ Endpoints:
     GET  /api/ai/status          — Model training status and metrics
 """
 
+import logging
 import os
+from typing import Any, Dict, List, Literal, Optional
+
 import pandas as pd
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field, ValidationError
+
+logger = logging.getLogger("paypulse.api")
+logging.basicConfig(level=os.environ.get("PAYPULSE_LOG_LEVEL", "INFO"))
 
 from src.data.generator import save_data, generate_payment_data, generate_company_profile
 from src.data.schemas import SUPPLIER_NAMES, CONTRACTUAL_TERMS, SUPPLIER_IDS
@@ -36,6 +43,7 @@ from src.models.baseline import baseline_forecast
 from src.models.scenarios import run_scenario, get_available_scenarios
 from src.detection.anomaly import detect_all_anomalies, detect_threshold_breach, detect_trend
 from src.detection.triage import detect_triage
+from src.detection.contagion import build_exposure_graph, simulate_contagion, top_systemic_nodes
 from src.explainability.narrator import (
     explain_forecast,
     explain_anomaly,
@@ -45,6 +53,10 @@ from src.explainability.narrator import (
 )
 from src.utils.helpers import sanitize_for_json
 from src.models.ml_engine import PayPulseAI
+from src.models.bank_grade import run_bank_grade_benchmark, get_cached_benchmark
+from src.data.portfolio import generate_portfolio
+from src.api.audit import log_inference, recent_audit_records
+from src.api.insights import get_sme_insights, get_all_insights, SME_DATABASE
 
 
 # ---------------------------------------------------------------------------
@@ -57,13 +69,80 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Allow CORS for local development
+# CORS: allow-list driven by env. Wildcard only when PAYPULSE_ALLOW_ANY_ORIGIN=1
+# (demo mode). In any realistic bank deployment this must be an explicit list.
+_allowed_origins_env = os.environ.get("PAYPULSE_ALLOWED_ORIGINS", "").strip()
+if os.environ.get("PAYPULSE_ALLOW_ANY_ORIGIN") == "1":
+    _allowed_origins = ["*"]
+elif _allowed_origins_env:
+    _allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+else:
+    _allowed_origins = [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+# API-key guard. When PAYPULSE_API_KEY is set, guarded endpoints require a matching
+# X-API-Key header. In production (PAYPULSE_ENV=production) the key is REQUIRED —
+# the app refuses to start without it, closing the "forgot to set the key" footgun.
+_PAYPULSE_ENV = os.environ.get("PAYPULSE_ENV", "development").strip().lower()
+_EXPECTED_API_KEY = os.environ.get("PAYPULSE_API_KEY", "").strip()
+_GUARDED_PREFIXES = ("/api/ai/", "/api/model/", "/api/contagion/", "/api/audit/")
+
+if _PAYPULSE_ENV == "production" and not _EXPECTED_API_KEY:
+    raise RuntimeError(
+        "PAYPULSE_API_KEY must be set when PAYPULSE_ENV=production. "
+        "Set a strong random secret via environment before starting the server."
+    )
+
+
+@app.middleware("http")
+async def _api_key_guard(request: Request, call_next):
+    if _EXPECTED_API_KEY and request.url.path.startswith(_GUARDED_PREFIXES):
+        provided = request.headers.get("x-api-key") or request.headers.get("X-API-Key")
+        if provided != _EXPECTED_API_KEY:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "missing or invalid X-API-Key"},
+            )
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# Request schemas (minimal, defensive validation at API boundary)
+# ---------------------------------------------------------------------------
+
+class ScenarioRequest(BaseModel):
+    scenario_type: Literal[
+        "continue_trend", "stabilize_now", "revenue_drop", "custom"
+    ] = "continue_trend"
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PaymentEntry(BaseModel):
+    week: int = Field(ge=1, le=520)
+    delay: float = Field(ge=0, le=3650)
+    invoice: float = Field(ge=0, le=1_000_000_000)
+
+
+class SupplierInput(BaseModel):
+    supplier_id: str = Field(min_length=1, max_length=50)
+    supplier_name: str = Field(min_length=1, max_length=200)
+    contractual_terms_days: int = Field(ge=1, le=365, default=21)
+    payments: List[PaymentEntry] = Field(default_factory=list)
+
+
+class CustomAnalyzeRequest(BaseModel):
+    suppliers: List[SupplierInput] = Field(min_length=1, max_length=100)
+
 
 # Global data store — loaded once at startup
 _data = {}
@@ -243,22 +322,20 @@ def get_triage():
 
 
 @app.post("/api/scenario")
-async def post_scenario(body: dict):
+async def post_scenario(body: ScenarioRequest):
     """
     Run a what-if scenario.
 
-    Request body:
-        {
-            "scenario_type": "continue_trend" | "stabilize_now" | "revenue_drop" | "custom",
-            "params": { ... }  // optional parameters
-        }
+    Request body validated by ScenarioRequest:
+        scenario_type: continue_trend | stabilize_now | revenue_drop | custom
+        params: optional dict of scenario parameters
     """
     df, _ = _ensure_data()
-
-    scenario_type = body.get("scenario_type", "continue_trend")
-    params = body.get("params", {})
-
-    result = run_scenario(df, scenario_type, params)
+    try:
+        result = run_scenario(df, body.scenario_type, body.params)
+    except Exception:
+        logger.exception("Scenario run failed: type=%s", body.scenario_type)
+        raise HTTPException(status_code=500, detail="scenario_failed")
     return sanitize_for_json(result)
 
 
@@ -386,21 +463,44 @@ def get_bank_risk():
 
 @app.get("/api/ai/status")
 def get_ai_status():
-    """Return AI model training status and performance metrics."""
+    """
+    Return AI model training status and performance metrics.
+
+    Includes both:
+      - `in_sample` numbers (training-set accuracy / MAE) — for engineering
+        diagnostics only, NEVER to be quoted as model performance.
+      - `bank_grade` numbers from the entity-level walk-forward benchmark
+        (src.models.bank_grade) — these are what a validator would review.
+    """
     ai = _ensure_ai()
+    try:
+        bench = get_cached_benchmark()
+        bank_grade = bench.get("aggregated", {})
+        label_summary = bench.get("label_summary", {})
+        portfolio_summary = bench.get("portfolio_summary", {})
+    except Exception as e:  # pragma: no cover
+        bank_grade = {"error": f"benchmark unavailable: {e}"}
+        label_summary = {}
+        portfolio_summary = {}
     return sanitize_for_json({
         "status": "ready" if ai.is_ready else "not_trained",
+        "bank_grade": bank_grade,
+        "bank_grade_label_summary": label_summary,
+        "bank_grade_portfolio_summary": portfolio_summary,
+        "in_sample": {
+            "forecaster_mae_train": ai.forecaster.train_mae,
+            "risk_classifier_accuracy_train": ai.risk_classifier.train_accuracy,
+            "warning": "in-sample metrics are for engineering diagnostics only; do NOT quote as model performance.",
+        },
         "models": {
             "forecaster": {
                 "type": "GradientBoostingRegressor",
                 "n_estimators": 200,
-                "training_mae": ai.forecaster.train_mae,
                 "top_features": ai.forecaster.feature_importances,
             },
             "risk_classifier": {
                 "type": "RandomForestClassifier",
                 "n_estimators": 150,
-                "training_accuracy": ai.risk_classifier.train_accuracy,
                 "top_features": ai.risk_classifier.feature_importances,
             },
             "anomaly_detector": {
@@ -431,6 +531,171 @@ def get_ai_status():
     })
 
 
+# ---------------------------------------------------------------------------
+# Bank-grade model card + contagion graph + audit
+# ---------------------------------------------------------------------------
+
+@app.get("/api/model/card")
+def get_model_card():
+    """
+    Validator-facing model card: algorithm, features, validation protocol,
+    honest metrics, leakage controls, known limitations.
+    """
+    bench = get_cached_benchmark()
+    return sanitize_for_json({
+        "generated_at": bench.get("generated_at"),
+        "model_card": bench.get("model_card", {}),
+        "label_summary": bench.get("label_summary", {}),
+        "portfolio_summary": bench.get("portfolio_summary", {}),
+        "aggregated_metrics": bench.get("aggregated", {}),
+        "holdout_metrics": (bench.get("holdout") or {}).get("metrics", {}),
+        "holdout_sizes": {
+            "train_size": (bench.get("holdout") or {}).get("train_size"),
+            "test_size": (bench.get("holdout") or {}).get("test_size"),
+        },
+    })
+
+
+_CONTAGION_CACHE = {}
+
+
+# Real SMEs used elsewhere in the demo — we overlay these names on top of
+# the first few synthetic portfolio borrowers so the Risk Spread dropdown
+# shows the portfolio names the user recognises instead of "SME-0001 Ltd".
+_REAL_PORTFOLIO_SMES = [
+    "Meridian Engineering Ltd",
+    "DeltaParts Ltd",
+    "GammaSupplies Co",
+    "BetaLogistics Ltd",
+    "AlphaSteel Corp",
+    "EpsilonServices",
+]
+
+
+def _ensure_contagion_graph():
+    """Generate a portfolio and build the contagion graph once per process.
+
+    The raw portfolio uses generic supplier names (e.g. "Materials Supplier 1")
+    which never match bank-book companies, so the default graph has no
+    borrower → borrower edges and contagion cannot propagate. In practice,
+    SMEs in the same bank book routinely supply one another. We inject
+    reproducible synthetic cross-firm edges here so the simulator has real
+    structure to work on.
+    """
+    if "graph" not in _CONTAGION_CACHE:
+        import random
+        payments, firms = generate_portfolio(n_companies=50, n_weeks=52, seed=17)
+        graph = build_exposure_graph(payments)
+
+        # Overlay real portfolio SME names onto the first N bank borrowers,
+        # and flag them so the frontend can surface them in the dropdown.
+        bank_ids_sorted = sorted(graph["bank_book"])
+        id_to_node = {n["id"]: n for n in graph["nodes"]}
+        for i, real_name in enumerate(_REAL_PORTFOLIO_SMES):
+            if i < len(bank_ids_sorted):
+                node = id_to_node[bank_ids_sorted[i]]
+                node["label"] = real_name
+                node["is_portfolio"] = True
+
+        # Inject inter-borrower edges so contagion has real structure to walk.
+        # Each borrower supplies a handful of peers; edge weights are small
+        # shares of receivables so a single failure only tips heavily-exposed
+        # downstream SMEs — not the whole book.
+        rng = random.Random(42)
+        new_edges = []
+        # Give each borrower 4–7 peer buyers (target side gets many sources,
+        # so no single source dominates its incoming share).
+        peer_buyers = {bid: set() for bid in bank_ids_sorted}
+        for supplier in bank_ids_sorted:
+            n_buyers = rng.randint(4, 7)
+            buyers = rng.sample([b for b in bank_ids_sorted if b != supplier], k=min(n_buyers, len(bank_ids_sorted) - 1))
+            for buyer in buyers:
+                peer_buyers[supplier].add(buyer)
+
+        for supplier, buyers in peer_buyers.items():
+            for buyer in buyers:
+                buyer_payables = id_to_node[buyer].get("total_payables", 1.0) or 1.0
+                # weight as 2–6% of buyer's total payables
+                w = buyer_payables * rng.uniform(0.02, 0.06)
+                new_edges.append({"source": buyer, "target": supplier, "weight": float(round(w, 2))})
+                id_to_node[supplier]["total_receivables"] = (
+                    id_to_node[supplier].get("total_receivables", 0.0) + w
+                )
+        graph["edges"].extend(new_edges)
+
+        _CONTAGION_CACHE["graph"] = graph
+        _CONTAGION_CACHE["firms"] = firms
+    return _CONTAGION_CACHE["graph"]
+
+
+@app.get("/api/contagion/graph")
+def get_contagion_graph(limit: int = 200):
+    """
+    Return the exposure graph as {nodes, edges}. Capped at `limit` edges
+    (ranked by weight) to keep the payload renderable in the browser.
+    """
+    graph = _ensure_contagion_graph()
+    edges = sorted(graph["edges"], key=lambda e: -e["weight"])[:max(1, limit)]
+    kept_ids = set()
+    for e in edges:
+        kept_ids.add(e["source"])
+        kept_ids.add(e["target"])
+    nodes = [n for n in graph["nodes"] if n["id"] in kept_ids]
+    return sanitize_for_json({
+        "nodes": nodes,
+        "edges": edges,
+        "bank_book": sorted(graph["bank_book"]),
+        "stats": {
+            "total_nodes": len(graph["nodes"]),
+            "total_edges": len(graph["edges"]),
+            "rendered_nodes": len(nodes),
+            "rendered_edges": len(edges),
+        },
+    })
+
+
+@app.get("/api/contagion/systemic")
+def get_contagion_systemic(k: int = 10):
+    """Return the top-k systemically important bank-book SMEs."""
+    graph = _ensure_contagion_graph()
+    return sanitize_for_json({"top_systemic": top_systemic_nodes(graph, k=k)})
+
+
+@app.post("/api/contagion/simulate")
+async def post_contagion_simulate(body: dict):
+    """
+    Simulate contagion from a set of seed nodes.
+
+    Body: {"seeds": ["C0003", ...], "steps": 8, "threshold": 0.25, "decay": 0.85}
+    """
+    graph = _ensure_contagion_graph()
+    seeds = body.get("seeds") or []
+    if not seeds:
+        return JSONResponse(status_code=400, content={"error": "seeds must be a non-empty list of node ids"})
+    result = simulate_contagion(
+        graph,
+        seeds,
+        steps=int(body.get("steps", 8)),
+        stress_threshold=float(body.get("threshold", 0.25)),
+        decay=float(body.get("decay", 0.85)),
+    )
+    log_inference(
+        endpoint="/api/contagion/simulate",
+        model_id="paypulse-contagion-v1",
+        subject_id=",".join(sorted(seeds)),
+        features={"seeds": list(seeds), "steps": body.get("steps", 8)},
+        output={"n_impacted": result["summary"]["n_bank_book_impacted"],
+                "exposure_at_risk": result["summary"]["total_exposure_at_risk"]},
+    )
+    return sanitize_for_json(result)
+
+
+@app.get("/api/audit/recent")
+def get_audit_recent(limit: int = 50):
+    """Return the last `limit` inference audit records (today's log file)."""
+    return sanitize_for_json({"records": recent_audit_records(limit=limit)})
+
+
 @app.get("/api/ai/forecast/{supplier_id}")
 def get_ai_forecast(supplier_id: str, horizon: int = 6):
     """Return ML-powered forecast for a specific supplier."""
@@ -450,6 +715,16 @@ def get_ai_risk(supplier_id: str):
 
     ai = _ensure_ai()
     risk = ai.classify_risk(supplier_id)
+    log_inference(
+        endpoint=f"/api/ai/risk/{supplier_id}",
+        model_id="paypulse-risk-clf-v2",
+        subject_id=supplier_id,
+        features={"supplier_id": supplier_id},
+        output={
+            "predicted_risk": risk.get("predicted_risk"),
+            "confidence": risk.get("confidence"),
+        },
+    )
     return sanitize_for_json(risk)
 
 
@@ -522,6 +797,141 @@ def get_ai_simulate(weeks: int = 1):
     """Simulate new weeks of data for real-time demo."""
     ai = _ensure_ai()
     return sanitize_for_json(ai.simulate_live(weeks))
+
+
+# ---------------------------------------------------------------------------
+# Behavioural Insights Endpoints (Groq LLM)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/insights/all")
+async def get_insights_all():
+    """Return AI-generated behavioural insights for all SMEs."""
+    results = await get_all_insights()
+    return sanitize_for_json({"insights": results})
+
+
+@app.get("/api/insights/{sme_id}")
+async def get_insights(sme_id: str):
+    """Return AI-generated behavioural insights for a single SME.
+
+    Uses Groq LLM (Llama 3.3 70B) when GROQ_API_KEY is set;
+    falls back to heuristic generation otherwise.
+    Results are cached per SME for the server lifetime.
+    """
+    if sme_id not in SME_DATABASE:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Unknown SME: {sme_id}"},
+        )
+    result = await get_sme_insights(sme_id)
+    return sanitize_for_json(result)
+
+
+@app.post("/api/custom/analyze")
+async def post_custom_analyze(body: CustomAnalyzeRequest):
+    """
+    Analyze user-provided custom supplier payment data.
+
+    Request body validated by CustomAnalyzeRequest: see schema definitions above.
+    """
+    import numpy as np
+
+    suppliers_input = body.suppliers
+    if not suppliers_input:
+        return JSONResponse(status_code=400, content={"error": "no_supplier_data"})
+
+    # Build a DataFrame from the custom data
+    records = []
+    for supplier in suppliers_input:
+        sid = supplier.supplier_id
+        sname = supplier.supplier_name
+        terms = supplier.contractual_terms_days
+        payments = supplier.payments
+
+        delays_so_far = []
+        for payment in sorted(payments, key=lambda p: p.week):
+            week = payment.week
+            delay = payment.delay
+            invoice = payment.invoice
+            delays_so_far.append(delay)
+
+            # Rolling 8-week average
+            window = delays_so_far[-8:]
+            hist_avg = round(sum(window) / len(window), 1)
+
+            # Payment status
+            if delay <= terms:
+                status = "on_time"
+            elif delay <= terms + 5:
+                status = "slightly_late"
+            elif delay <= terms + 15:
+                status = "late"
+            else:
+                status = "critical"
+
+            records.append({
+                "week_number": week,
+                "date": f"2024-01-{min(week, 28):02d}",
+                "supplier_id": sid,
+                "supplier_name": sname,
+                "invoice_amount": invoice,
+                "payment_delay_days": delay,
+                "historical_average_delay": hist_avg,
+                "contractual_terms_days": terms,
+                "payment_status": status,
+            })
+
+    if len(records) < 4:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "insufficient_data",
+                "message": "Provide at least 4 payment entries.",
+            },
+        )
+
+    custom_df = pd.DataFrame(records)
+
+    # Try to train a fresh AI engine on this custom data
+    try:
+        custom_ai = PayPulseAI()
+        custom_ai.train(custom_df)
+
+        # Run analysis for each supplier
+        custom_supplier_ids = custom_df["supplier_id"].unique().tolist()
+        analyses = {}
+        for sid in custom_supplier_ids:
+            try:
+                analyses[sid] = custom_ai.full_analysis(sid, horizon=6)
+            except Exception:
+                analyses[sid] = {"error": f"Could not analyze {sid}"}
+
+        result = {
+            "status": "success",
+            "models_trained": custom_ai.is_ready,
+            "supplier_analyses": analyses,
+            "training_samples": len(custom_df),
+            "suppliers_analyzed": len(custom_supplier_ids),
+        }
+
+        if custom_ai.is_ready:
+            result["model_metrics"] = {
+                "forecaster_mae": custom_ai.forecaster.train_mae,
+                "classifier_accuracy": custom_ai.risk_classifier.train_accuracy,
+            }
+
+        return sanitize_for_json(result)
+
+    except Exception:
+        # Internal details go to logs; client sees a stable, non-leaky error code.
+        logger.exception("Custom analyze failed")
+        return sanitize_for_json({
+            "status": "fallback",
+            "error": "ml_training_failed",
+            "message": "ML training failed, returning basic analysis",
+            "supplier_count": custom_df["supplier_id"].nunique(),
+            "total_records": len(custom_df),
+        })
 
 
 # ---------------------------------------------------------------------------

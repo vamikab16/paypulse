@@ -146,6 +146,7 @@ Cross-Supplier Signals (Triage Detection)
 ### API Endpoints
 
 ```
+# AI / ML model endpoints
 GET  /api/ai/status            — Model training metrics and feature importances (6 models)
 GET  /api/ai/forecast/{id}     — ML forecast with confidence bands (Gradient Boosting)
 GET  /api/ai/risk/{id}         — Risk classification with probabilities (Random Forest)
@@ -157,6 +158,13 @@ GET  /api/ai/compare/{id}      — Head-to-head model comparison (MAE benchmarki
 GET  /api/ai/simulate          — Real-time data simulation (trend extrapolation)
 GET  /api/ai/analysis/{id}     — Full AI analysis (all 6 models combined)
 GET  /api/ai/dashboard         — Portfolio AI overview for all suppliers
+
+# Bank-grade validation, systemic risk, and audit
+GET  /api/model/card           — Model card: features, algorithm, validation, caveats
+GET  /api/contagion/graph      — Buyer → supplier exposure graph (nodes + edges)
+GET  /api/contagion/systemic   — Top systemically important bank-book nodes
+POST /api/contagion/simulate   — Propagate distress from seed nodes across the graph
+GET  /api/audit/recent         — Most recent inference audit records
 ```
 
 ### Example API Response: `/api/ai/analysis/S2`
@@ -174,6 +182,54 @@ GET  /api/ai/dashboard         — Portfolio AI overview for all suppliers
   "model_info": { "total_models": 6 }
 }
 ```
+
+---
+
+## 🏦 Bank-Grade Validation, Systemic Risk & Audit
+
+Beyond the core ML demo, PayPulse ships a second-tier module set built to withstand scrutiny from a bank model validator, a regulator, or a credit committee. These modules address the three questions that block every real SME-risk deployment: **is the model honest, does it see portfolio contagion, and can every decision be replayed on demand?**
+
+### Module Overview
+
+| Module | File | Purpose |
+|---|---|---|
+| **Portfolio Generator** | [src/data/portfolio.py](src/data/portfolio.py) | Synthesises a 50-firm SME portfolio with latent cash-flow stress, realistic ~2–4% annual default rate, and diverse profile mix (healthy / gradually stressed / acute / seasonal) |
+| **Forward-Looking Labels** | [src/data/labels.py](src/data/labels.py) | Replaces leakage-prone contemporaneous labels with a strictly-future distress indicator (critical event within next *N* weeks) |
+| **Honest Metrics** | [src/models/metrics.py](src/models/metrics.py) | Validator-grade metrics: AUC-ROC, KS, Brier, Precision@k, Lift@decile, calibration deciles, PSI drift |
+| **Entity-Level CV** | [src/models/validation.py](src/models/validation.py) | Walk-forward cross-validation with disjoint firm IDs between train/test and strictly-future test windows |
+| **Bank-Grade Harness** | [src/models/bank_grade.py](src/models/bank_grade.py) | End-to-end pipeline: portfolio → labels → leakage-safe features → walk-forward CV → per-fold metrics → model card |
+| **Contagion Graph** | [src/detection/contagion.py](src/detection/contagion.py) | Buyer → supplier exposure graph + discrete-time stress-propagation simulation with £-denominated exposure-at-risk |
+| **Inference Audit** | [src/api/audit.py](src/api/audit.py) | Append-only JSONL log of every model inference: request ID, model ID, feature hash, output, reason codes — GDPR Art. 22 ready |
+
+### Why This Matters
+
+**1. No target leakage.** The original `MLRiskClassifier` derived its label from `delay − contractual_terms` — the same quantity encoded in the `excess_over_terms` feature. That is a lookup table dressed as a classifier. [src/data/labels.py](src/data/labels.py) replaces it with a forward-looking binary target (`y_future_distress`): *will this supplier enter a critical state in the next 6 weeks?* Features at time *t* see only weeks ≤ *t*; labels depend strictly on weeks > *t*.
+
+**2. Honest validation.** [src/models/validation.py](src/models/validation.py) enforces two rules that every bank validator asks about: (a) no firm appears in both train and test, and (b) every test observation is strictly in the future of every training observation. Walk-forward folds yield mean ± std metric bundles — not a single cherry-picked number.
+
+**3. Metrics a credit committee will read.** [src/models/metrics.py](src/models/metrics.py) replaces `train_accuracy` — the single most disqualifying number a validator could see — with **AUC-ROC, KS statistic, Brier score, Precision@{1,5,10}%, Lift@decile, decile-binned calibration, and PSI** for drift monitoring. All implemented in plain numpy/pandas.
+
+**4. Portfolio contagion, not isolated nodes.** [src/detection/contagion.py](src/detection/contagion.py) builds a directed buyer→supplier exposure graph from the bank's own payment data, folds supplier names into bank-book nodes where they match, then runs a discrete-time stress-propagation simulation. Output: the set of downstream SMEs impacted within *H* weeks of a seed event, with total £ exposure-at-risk. Plus `top_systemic_nodes()` for exposure-weighted out-degree centrality — a cheap, interpretable precursor to Katz/eigenvector centrality.
+
+**5. Replayable decisions.** [src/api/audit.py](src/api/audit.py) writes one JSON line per inference with ISO-8601 timestamp, UUID request ID, model ID, subject ID, SHA1 feature hash, output, and reason codes. A validator, regulator, or GDPR Art. 22 subject-access request can pull the exact features and output for any decision on any date. File-based today; swap for S3 Object Lock / Kafka→Iceberg in production.
+
+### Bank-Grade Benchmark Pipeline
+
+[src/models/bank_grade.py](src/models/bank_grade.py) wires it all together into a single artefact cached at FastAPI startup:
+
+```
+generate_portfolio(n_companies=50)      →  forward_distress_label(horizon=6w)
+        ↓                                              ↓
+leakage-safe feature engineering        →  walk_forward_splits(n_folds=3)
+        ↓                                              ↓
+RandomForestClassifier(balanced)        →  evaluate_classifier per fold
+        ↓
+aggregate_fold_metrics → mean ± std of AUC / KS / Brier / P@k / Lift
+        ↓
+model_card: features, algorithm, validation strategy, leakage controls, known limitations
+```
+
+The endpoint `GET /api/model/card` surfaces this artefact directly — features, validation strategy, leakage controls, and an explicit list of known limitations. No training accuracy. No single-split reporting. No black boxes.
 
 ---
 
@@ -473,35 +529,53 @@ No black boxes. No unexplained scores. Every output traces back to observable pa
 
 ```
 PayPulse/
-├── public/                    # Frontend
-│   ├── index.html             # Main app (landing, dashboard, AI, simulator, explainer)
-│   ├── app.js                 # All frontend logic including AI page rendering
-│   └── styles.css             # Full styling including AI Intelligence page
+├── public/                       # Frontend
+│   ├── index.html                # Main app (landing, dashboard, AI, simulator, explainer)
+│   ├── app.js                    # All frontend logic including AI page rendering
+│   └── styles.css                # Full styling including AI Intelligence page
 ├── src/
 │   ├── api/
-│   │   └── server.py          # FastAPI backend — all endpoints including /api/ai/*
+│   │   ├── server.py             # FastAPI backend — all /api/* endpoints
+│   │   └── audit.py              # 📝 Append-only inference audit log (JSONL, GDPR-ready)
 │   ├── models/
-│   │   ├── ml_engine.py       # 🤖 ML Engine — GradientBoosting + RandomForest + IsolationForest
-│   │   ├── forecaster.py      # Holt-Winters exponential smoothing (statistical baseline)
-│   │   ├── baseline.py        # Rolling average baseline for comparison
-│   │   └── scenarios.py       # What-if scenario simulation engine
+│   │   ├── ml_engine.py          # 🤖 ML Engine — GradientBoosting + RandomForest + IsolationForest
+│   │   ├── neural_forecaster.py  # GRU neural forecaster (from-scratch NumPy)
+│   │   ├── explainability.py     # Permutation SHAP implementation
+│   │   ├── forecaster.py         # Holt-Winters exponential smoothing (statistical baseline)
+│   │   ├── baseline.py           # Rolling average baseline for comparison
+│   │   ├── scenarios.py          # What-if scenario simulation engine
+│   │   ├── metrics.py            # 🏦 Validator-grade metrics (AUC, KS, Brier, P@k, PSI)
+│   │   ├── validation.py         # 🏦 Entity-level walk-forward cross-validation
+│   │   └── bank_grade.py         # 🏦 End-to-end honest benchmark harness + model card
 │   ├── detection/
-│   │   ├── anomaly.py         # Threshold breach + trend detection (rule-based)
-│   │   └── triage.py          # Payment triage detection algorithm
+│   │   ├── anomaly.py            # Threshold breach + trend detection (rule-based)
+│   │   ├── triage.py             # Payment triage detection algorithm
+│   │   └── contagion.py          # 🕸 Buyer→supplier exposure graph + contagion simulation
 │   ├── explainability/
-│   │   └── narrator.py        # Plain-English explanation generator
+│   │   └── narrator.py           # Plain-English explanation generator
 │   ├── data/
-│   │   ├── generator.py       # Synthetic data generator (5 suppliers × 52 weeks)
-│   │   └── schemas.py         # Data schemas, constants, validation
+│   │   ├── generator.py          # Single-firm synthetic data generator (5 suppliers × 52 weeks)
+│   │   ├── portfolio.py          # 🏦 Multi-company SME portfolio generator (50 firms, hazard model)
+│   │   ├── labels.py             # 🏦 Forward-looking distress labels (leakage-free)
+│   │   └── schemas.py            # Data schemas, constants, validation
 │   └── utils/
-│       └── helpers.py         # JSON sanitisation and utility functions
+│       └── helpers.py            # JSON sanitisation and utility functions
 ├── data/
-│   ├── payment_history.csv    # Generated payment data (260 rows)
-│   └── company_profile.json   # Company metadata
-├── requirements.txt           # Python dependencies (FastAPI, scikit-learn, statsmodels, etc.)
-├── run.py                     # Application entry point
-└── README.md                  # This file
+│   ├── payment_history.csv       # Generated payment data (260 rows)
+│   ├── company_profile.json      # Company metadata
+│   └── audit/                    # 📝 Daily inference audit logs (inference-YYYYMMDD.jsonl)
+├── docs/
+│   ├── architecture.md           # Architecture notes
+│   ├── demo_script.py            # Demo walkthrough script
+│   └── PayPulse_Demo_Script.pdf  # Printable demo script
+├── tests/
+│   └── test_anomaly.py           # Detection unit tests
+├── requirements.txt              # Python dependencies (FastAPI, scikit-learn, statsmodels, etc.)
+├── run.py                        # Application entry point
+└── README.md                     # This file
 ```
+
+> 🏦 = bank-grade validation / systemic risk modules  📝 = audit & replay  🕸 = network contagion
 
 ---
 

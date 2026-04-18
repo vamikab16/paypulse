@@ -293,20 +293,40 @@
                 <nav class="nav" id="main-nav">
                     <button class="nav-btn active" data-page="dashboard">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                        Dashboard
+                        Portfolio
                     </button>
-                    <button class="nav-btn" data-page="simulator">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v6l3 8H6l3-8V3z"/><path d="M8 20h8"/></svg>
-                        Simulator
-                    </button>
-                    <button class="nav-btn" data-page="ai">
+                    <button class="nav-btn" data-page="bankrisk">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
-                        AI Models
+                        Bank Risk
                     </button>
-                    <button class="nav-btn" data-page="explain">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                        How It Works
+                    <button class="nav-btn" data-page="contagion">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="14" r="2"/><circle cx="5" cy="20" r="2"/><circle cx="19" cy="20" r="2"/><path d="M5 8v10"/><path d="M19 8v10"/><path d="M6.5 7.5l4 5"/><path d="M17.5 7.5l-4 5"/><path d="M6.5 18.5l4-4"/><path d="M17.5 18.5l-4-4"/></svg>
+                        Risk Spread
                     </button>
+                    <div class="more-menu-wrap" id="more-menu-wrap">
+                        <button class="nav-btn more-menu-trigger" id="more-menu-trigger">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                            More
+                        </button>
+                        <div class="more-dropdown" id="more-dropdown">
+                            <button class="more-dropdown-item" data-morepage="bankrisk" data-subtab="ai-details">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+                                AI Models
+                            </button>
+                            <button class="more-dropdown-item" data-morepage="contagion" data-action="open-simulator">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M9 3h6v6l3 8H6l3-8V3z"/><path d="M8 20h8"/></svg>
+                                Simulator
+                            </button>
+                            <button class="more-dropdown-item" data-morepage="mydata">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                                My Data
+                            </button>
+                            <button class="more-dropdown-item" data-morepage="explain">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                How It Works
+                            </button>
+                        </div>
+                    </div>
                 </nav>
                 <div class="header-right">
                     <div class="report-dropdown-wrap" id="report-dropdown-wrap">
@@ -518,6 +538,71 @@
                                 <p class="triage-score-explanation" id="triage-score-explanation"></p>
                             </div>
                         </section>
+
+                        <!-- AI Behaviour Insights -->
+                        <section class="insights-section" id="insights-section">
+                            <h2 class="section-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+                                AI Behaviour Insights
+                                <span class="insights-source-badge" id="insights-source-badge"></span>
+                            </h2>
+
+                            <!-- Loading skeleton -->
+                            <div class="insights-skeleton" id="insights-skeleton">
+                                <div class="skel-line skel-line-wide"></div>
+                                <div class="skel-line skel-line-medium"></div>
+                                <div class="skel-tags">
+                                    <div class="skel-tag"></div>
+                                    <div class="skel-tag"></div>
+                                    <div class="skel-tag"></div>
+                                </div>
+                                <div class="skel-line skel-line-wide"></div>
+                                <div class="skel-line skel-line-short"></div>
+                            </div>
+
+                            <!-- Insights content (hidden until loaded) -->
+                            <div class="insights-card" id="insights-card" style="display:none;">
+                                <div class="insights-summary" id="insights-summary"></div>
+
+                                <div class="insights-block">
+                                    <h4 class="insights-block-title">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                        Key Issues
+                                    </h4>
+                                    <div class="insights-issues" id="insights-issues"></div>
+                                </div>
+
+                                <div class="insights-block">
+                                    <h4 class="insights-block-title">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                        Suggestions
+                                    </h4>
+                                    <ul class="insights-suggestions" id="insights-suggestions"></ul>
+                                </div>
+
+                                <div class="insights-bottom-row">
+                                    <div class="insights-block insights-block-half">
+                                        <h4 class="insights-block-title">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                            Priority Focus
+                                        </h4>
+                                        <div class="insights-focus" id="insights-focus"></div>
+                                    </div>
+                                    <div class="insights-block insights-block-half">
+                                        <h4 class="insights-block-title">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                                            Expected Impact
+                                        </h4>
+                                        <p class="insights-impact" id="insights-impact"></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Error fallback -->
+                            <div class="insights-error" id="insights-error" style="display:none;">
+                                <p>Unable to load AI insights at this time.</p>
+                            </div>
+                        </section>
                     </div>
 
                     <!-- ═══ BANK RISK VIEW (PORTFOLIO DASHBOARD) ═══ -->
@@ -537,20 +622,148 @@
                             </div>
                             <div class="portfolio-list" id="portfolio-list"></div>
                         </section>
+
+
+                        <!-- RM Actions -->
+                        <section class="rm-actions-section">
+                            <h2 class="section-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                                Relationship Manager — Recommended Actions
+                            </h2>
+                            <div class="rm-actions-list" id="rm-actions-list">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </section>
+
+
+                        <!-- Open Banking Integration -->
+                        <section class="openbanking-section">
+                            <div class="openbanking-card">
+                                <div class="openbanking-left">
+                                    <div class="openbanking-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V5a4 4 0 00-8 0v2"/><circle cx="12" cy="14" r="2"/></svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="openbanking-title">Open Banking Integration Ready</h3>
+                                        <p class="openbanking-desc">PayPulse can connect to NatWest Open Banking APIs to automatically ingest real supplier payment data — eliminating manual input and enabling continuous, real-time monitoring across the entire SME portfolio.</p>
+                                    </div>
+                                </div>
+                                <div class="openbanking-badges">
+                                    <span class="ob-badge">PSD2 Compliant</span>
+                                    <span class="ob-badge">FCA Authorised</span>
+                                    <span class="ob-badge">REST API</span>
+                                </div>
+                            </div>
+                        </section>
+
                     </div>
                 </div>
             </main>
 
-            <!-- PAGE: AI Intelligence -->
-            <main class="page" id="page-ai">
+            <!-- PAGE: Bank Risk (Sub-tabs: Overview | AI Details | Model Card) -->
+            <main class="page" id="page-bankrisk">
                 <section class="hero hero-compact">
                     <p class="hero-label">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
-                        Machine Learning Engine
+                        Risk Intelligence Deep-Dive
                     </p>
-                    <h1 class="hero-title">AI Predictive Intelligence</h1>
-                    <p class="hero-sub">Real ML models trained on payment data — Gradient Boosting forecasting, Random Forest risk classification, and Isolation Forest anomaly detection.</p>
+                    <h1 class="hero-title">Bank Risk Analysis</h1>
+                    <p class="hero-sub">AI-powered risk assessment with real ML models — explore the overview or dive into model details.</p>
                 </section>
+
+                <!-- Sub-tab bar -->
+                <div class="subtab-bar" id="bankrisk-subtabs">
+                    <button class="subtab-btn active" data-subtab="overview">Overview</button>
+                    <button class="subtab-btn" data-subtab="ai-details">AI Details</button>
+                    <div class="subtab-slider"></div>
+                </div>
+
+                <!-- ═══ SUB-TAB: Overview ═══ -->
+                <div class="subtab-content active" id="subtab-overview">
+                    <!-- AI Model Status Cards (summary) -->
+                    <section class="ai-status-section" id="ai-status-section-overview">
+                        <div class="ai-status-cards">
+                            <div class="ai-model-card">
+                                <div class="ai-model-icon forecaster-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                </div>
+                                <h3>Forecaster</h3>
+                                <span class="ai-model-type">GradientBoosting</span>
+                                <div class="ai-model-metrics-container">
+                                    <div class="ai-model-metric">
+                                        <span class="ai-metric-label">Training MAE</span>
+                                        <span class="ai-metric-value" id="ai-forecaster-mae-ov">—</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ai-model-card">
+                                <div class="ai-model-icon classifier-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                </div>
+                                <h3>Risk Classifier</h3>
+                                <span class="ai-model-type">RandomForest</span>
+                                <div class="ai-model-metrics-container">
+                                    <div class="ai-model-metric">
+                                        <span class="ai-metric-label">AUC (out-of-time)</span>
+                                        <span class="ai-metric-value" id="ai-classifier-auc-ov">—</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ai-model-card">
+                                <div class="ai-model-icon anomaly-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                </div>
+                                <h3>Anomaly Detector</h3>
+                                <span class="ai-model-type">IsolationForest</span>
+                                <div class="ai-model-metrics-container">
+                                    <div class="ai-model-metric">
+                                        <span class="ai-metric-label">Status</span>
+                                        <span class="ai-metric-value" id="ai-anomaly-status-ov">—</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- How the AI works — collapsed section -->
+                    <section class="ai-expander-section">
+                        <button class="ai-expander-toggle" id="ai-expander-toggle">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+                            How the AI works
+                            <svg class="ai-expander-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="ai-expander-content" id="ai-expander-content">
+                            <div class="ai-expander-grid">
+                                <div class="ai-expander-item">
+                                    <div class="ai-expander-num">1</div>
+                                    <h4>Payment Data</h4>
+                                    <p>Ingest supplier payment records, timing, and contractual terms from bank transaction data.</p>
+                                </div>
+                                <div class="ai-expander-item">
+                                    <div class="ai-expander-num">2</div>
+                                    <h4>Triage Detection</h4>
+                                    <p>AI detects selective payment prioritisation — a leading indicator of cash flow stress.</p>
+                                </div>
+                                <div class="ai-expander-item">
+                                    <div class="ai-expander-num">3</div>
+                                    <h4>Risk Scoring</h4>
+                                    <p>Multi-model ensemble (GBM, Random Forest, Isolation Forest) produces calibrated risk scores.</p>
+                                </div>
+                                <div class="ai-expander-item">
+                                    <div class="ai-expander-num">4</div>
+                                    <h4>Proactive Action</h4>
+                                    <p>Automated alerts, RM outreach recommendations, and Consumer Duty compliance support.</p>
+                                </div>
+                            </div>
+                            <button class="ai-expander-deep-btn" id="ai-go-deeper-btn">
+                                Go deeper →
+                            </button>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- ═══ SUB-TAB: AI Details ═══ -->
+                <div class="subtab-content" id="subtab-ai-details">
 
                 <!-- AI Model Status -->
                 <section class="ai-status-section" id="ai-status-section">
@@ -561,10 +774,13 @@
                             </div>
                             <h3>Forecaster</h3>
                             <span class="ai-model-type">GradientBoosting</span>
-                            <div class="ai-model-metric">
-                                <span class="ai-metric-label">Training MAE</span>
-                                <span class="ai-metric-value" id="ai-forecaster-mae">—</span>
+                            <div class="ai-model-metrics-container">
+                                <div class="ai-model-metric">
+                                    <span class="ai-metric-label">Training MAE</span>
+                                    <span class="ai-metric-value" id="ai-forecaster-mae">—</span>
+                                </div>
                             </div>
+                            <div class="ai-model-footer"></div>
                         </div>
                         <div class="ai-model-card">
                             <div class="ai-model-icon classifier-icon">
@@ -572,10 +788,13 @@
                             </div>
                             <h3>Risk Classifier</h3>
                             <span class="ai-model-type">RandomForest</span>
-                            <div class="ai-model-metric">
-                                <span class="ai-metric-label">Accuracy</span>
-                                <span class="ai-metric-value" id="ai-classifier-accuracy">—</span>
+                            <div class="ai-model-metrics-container">
+                                <div class="ai-model-metric">
+                                    <span class="ai-metric-label">AUC (out-of-time)</span>
+                                    <span class="ai-metric-value" id="ai-classifier-auc">—</span>
+                                </div>
                             </div>
+                            <div class="ai-model-footer"></div>
                         </div>
                         <div class="ai-model-card">
                             <div class="ai-model-icon anomaly-icon">
@@ -583,10 +802,13 @@
                             </div>
                             <h3>Anomaly Detector</h3>
                             <span class="ai-model-type">IsolationForest</span>
-                            <div class="ai-model-metric">
-                                <span class="ai-metric-label">Status</span>
-                                <span class="ai-metric-value" id="ai-anomaly-status">—</span>
+                            <div class="ai-model-metrics-container">
+                                <div class="ai-model-metric">
+                                    <span class="ai-metric-label">Status</span>
+                                    <span class="ai-metric-value" id="ai-anomaly-status">—</span>
+                                </div>
                             </div>
+                            <div class="ai-model-footer"></div>
                         </div>
                     </div>
                 </section>
@@ -709,10 +931,12 @@
                         <div class="ai-live-results" id="ai-live-results"></div>
                     </section>
                 </div>
+
+                </div>
             </main>
 
-            <!-- PAGE: Simulator -->
-            <main class="page" id="page-simulator">
+            <!-- PAGE: Simulator (hidden, content is inline in Risk Spread) -->
+            <main class="page" id="page-simulator" style="display:none !important;">
                 <section class="hero hero-compact">
                     <p class="hero-label">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 3h6v6l3 8H6l3-8V3z"/><path d="M8 20h8"/></svg>
@@ -801,6 +1025,213 @@
                         <canvas id="scenario-chart"></canvas>
                     </div>
                 </section>
+            </main>
+
+            <!-- PAGE: Risk Spread Simulator -->
+            <main class="page" id="page-contagion">
+
+                <!-- Hero: Clean, business-first headline -->
+                <section class="cg-hero">
+                    <div class="cg-hero-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="14" r="2"/><circle cx="5" cy="20" r="2"/><circle cx="19" cy="20" r="2"/><path d="M6.5 7.5l4 5"/><path d="M17.5 7.5l-4 5"/><path d="M6.5 18.5l4-4"/><path d="M17.5 18.5l-4-4"/></svg>
+                        Risk Spread Analysis
+                    </div>
+                    <h1 class="cg-hero-title" id="cg-hero-title">
+                        Select an SME to see how risk spreads across your portfolio
+                    </h1>
+                    <p class="cg-hero-sub">
+                        See what happens if one business in your portfolio fails — how many others are affected and how much exposure is at risk.
+                    </p>
+                </section>
+
+                <!-- Controls: SME selector + Run button + Try a scenario -->
+                <section class="cg-controls">
+                    <div class="cg-control-group">
+                        <label class="cg-control-label" for="contagion-seed-select">Choose an SME</label>
+                        <select class="cg-select" id="contagion-seed-select">
+                            <option value="">Loading portfolio…</option>
+                        </select>
+                    </div>
+                    <button class="cg-run-btn" id="contagion-run-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Run Simulation
+                    </button>
+                    <button class="cg-scenario-btn" id="inline-simulator-toggle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M9 3h6v6l3 8H6l3-8V3z"/><path d="M8 20h8"/></svg>
+                        Try a scenario →
+                    </button>
+                    <!-- Hidden controls (keep functionality but hide from UI) -->
+                    <input type="hidden" id="contagion-steps" value="8" />
+                    <input type="hidden" id="contagion-threshold" value="0.8" />
+                </section>
+
+                <!-- Inline Scenario Simulator (revealed on button click) -->
+                <section class="inline-simulator" id="inline-simulator" style="display:none;">
+                    <div class="inline-sim-header">
+                        <h2 class="inline-sim-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 3h6v6l3 8H6l3-8V3z"/><path d="M8 20h8"/></svg>
+                            Scenario Simulator
+                        </h2>
+                        <button class="inline-sim-close" id="inline-simulator-close">✕</button>
+                    </div>
+                    <p class="inline-sim-desc">Explore how different actions change the risk outlook for the selected SME.</p>
+
+                    <div class="sim-controls inline-sim-controls">
+                        <div class="sim-field">
+                            <label class="sim-label">Select Scenario</label>
+                            <select class="sim-select" id="inline-scenario-select">
+                                <option value="continue_trend">No Action: Current Trend Continues</option>
+                                <option value="accelerate_payments">Intervene: Accelerate Payments</option>
+                                <option value="stabilize_now">Stabilize Payments Today</option>
+                                <option value="revenue_drop">Stress Test: Revenue Drop (20%)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="inline-run-scenario-btn">Run Scenario</button>
+                    </div>
+
+                    <div class="inline-sim-result" id="inline-sim-result" style="display:none;">
+                        <div class="sim-comparison" id="inline-sim-comparison">
+                            <div class="sim-compare-card">
+                                <span class="sim-compare-label">Current State</span>
+                                <div class="sim-compare-metric">
+                                    <span class="sim-compare-title">Risk Level</span>
+                                    <span class="sim-compare-value" id="inline-sim-current-risk">AMBER</span>
+                                </div>
+                                <div class="sim-compare-metric">
+                                    <span class="sim-compare-title">Avg Delay</span>
+                                    <span class="sim-compare-value" id="inline-sim-current-avg">—</span>
+                                </div>
+                            </div>
+                            <div class="sim-compare-arrow" id="inline-sim-compare-arrow">→</div>
+                            <div class="sim-compare-card scenario" id="inline-sim-compare-scenario-card">
+                                <span class="sim-compare-label">If This Happens</span>
+                                <div class="sim-compare-metric">
+                                    <span class="sim-compare-title">Risk Level</span>
+                                    <span class="sim-compare-value" id="inline-sim-scenario-risk">RED</span>
+                                </div>
+                                <div class="sim-compare-metric">
+                                    <span class="sim-compare-title">Avg Delay</span>
+                                    <span class="sim-compare-value" id="inline-sim-scenario-avg">—</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="sim-summary" id="inline-sim-summary"></p>
+                    </div>
+                </section>
+
+                <!-- Key Metrics: 3 prominent cards -->
+                <section class="cg-metrics" id="contagion-summary" style="display:none;">
+                    <div class="cg-metric-card cg-metric-exposure">
+                        <div class="cg-metric-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                        </div>
+                        <span class="cg-metric-label">Total Exposure at Risk</span>
+                        <span class="cg-metric-value" id="cg-exposure">—</span>
+                    </div>
+                    <div class="cg-metric-card cg-metric-impacted">
+                        <div class="cg-metric-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                        </div>
+                        <span class="cg-metric-label">SMEs Impacted</span>
+                        <span class="cg-metric-value" id="cg-n-impacted">—</span>
+                    </div>
+                    <div class="cg-metric-card cg-metric-high-risk">
+                        <div class="cg-metric-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        </div>
+                        <span class="cg-metric-label">High-Risk SMEs</span>
+                        <span class="cg-metric-value" id="cg-n-high-risk">—</span>
+                    </div>
+                    <!-- Hidden field to preserve seed count for JS -->
+                    <span id="cg-n-seeds" style="display:none;">—</span>
+                    <span id="cg-steps" style="display:none;">—</span>
+                </section>
+
+                <!-- Shockwave Epicenter: the star visualization -->
+                <section class="cg-shockwave-section" id="cg-shockwave-section">
+                    <div class="cg-shockwave-head">
+                        <div class="cg-shockwave-head-left">
+                            <span class="cg-shockwave-eyebrow">
+                                <span class="cg-live-dot"></span>
+                                Contagion Simulation
+                            </span>
+                            <h2 class="cg-shockwave-title">Shockwave Epicenter</h2>
+                            <p class="cg-shockwave-sub" id="cg-shockwave-sub">Distance from the centre represents how quickly distress reaches each business.</p>
+                        </div>
+                        <div class="cg-shockwave-key">
+                            <span class="cg-key-item"><span class="cg-key-dot cg-k-seed"></span>Source</span>
+                            <span class="cg-key-item"><span class="cg-key-dot cg-k-w1"></span>Week 1–2</span>
+                            <span class="cg-key-item"><span class="cg-key-dot cg-k-w2"></span>Week 3–4</span>
+                            <span class="cg-key-item"><span class="cg-key-dot cg-k-w3"></span>Week 5+</span>
+                        </div>
+                    </div>
+                    <div class="cg-shockwave-stage">
+                        <svg id="cg-shockwave-svg" viewBox="0 0 800 560" preserveAspectRatio="xMidYMid meet"></svg>
+                        <div class="cg-shockwave-empty" id="cg-shockwave-empty">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                            <p>Choose an SME and run the simulation to watch distress ripple through your portfolio.</p>
+                        </div>
+                        <div class="cg-shockwave-float" id="cg-shockwave-float" style="display:none;">
+                            <span class="cg-float-label">Portfolio exposure at risk</span>
+                            <span class="cg-float-value" id="cg-float-value">—</span>
+                            <span class="cg-float-sub" id="cg-float-sub">— of portfolio</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Damage Report: 3-part narrative -->
+                <section class="cg-damage" id="cg-damage" style="display:none;">
+                    <div class="cg-damage-step">
+                        <span class="cg-damage-num">01</span>
+                        <span class="cg-damage-label">Trigger</span>
+                        <p class="cg-damage-text" id="cg-damage-trigger">—</p>
+                    </div>
+                    <div class="cg-damage-arrow">→</div>
+                    <div class="cg-damage-step">
+                        <span class="cg-damage-num">02</span>
+                        <span class="cg-damage-label">Spread</span>
+                        <p class="cg-damage-text" id="cg-damage-spread">—</p>
+                    </div>
+                    <div class="cg-damage-arrow">→</div>
+                    <div class="cg-damage-step cg-damage-step-final">
+                        <span class="cg-damage-num">03</span>
+                        <span class="cg-damage-label">Impact</span>
+                        <p class="cg-damage-text" id="cg-damage-impact">—</p>
+                    </div>
+                </section>
+
+                <!-- Week-by-Week Propagation Timeline -->
+                <section class="cg-timeline-section" id="cg-timeline-section" style="display:none;">
+                    <div class="cg-timeline-head">
+                        <h2 class="cg-section-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            Propagation Timeline
+                        </h2>
+                        <span class="cg-timeline-sub" id="cg-timeline-sub">How damage accumulates week by week</span>
+                    </div>
+                    <div class="cg-timeline" id="cg-timeline"></div>
+                </section>
+
+                <!-- Hidden legacy SVG (kept for any residual references) -->
+                <svg id="contagion-svg" style="display:none;"></svg>
+
+                <!-- Impacted SMEs List (simplified single table, no systemic table) -->
+                <section class="cg-impacted-section" id="cg-impacted-section" style="display:none;">
+                    <h2 class="cg-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                        Businesses at Risk
+                    </h2>
+                    <div class="cg-impacted-list" id="cg-impacted-list">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </section>
+
+                <!-- Hidden systemic table (preserved for JS but not shown) -->
+                <div style="display:none;">
+                    <table id="cg-impacted-table"><tbody></tbody></table>
+                    <table id="cg-systemic-table"><tbody></tbody></table>
+                    <button id="contagion-systemic-btn"></button>
+                </div>
             </main>
 
             <!-- PAGE: How It Works (Visual Pipeline) -->
@@ -904,6 +1335,261 @@
                             <li><strong>Strengthen SME relationships</strong> by offering proactive support before crisis.</li>
                             <li><strong>Scalable across the portfolio</strong> — automated monitoring of thousands of SME accounts.</li>
                         </ul>
+                    </div>
+                </section>
+            </main>
+
+            <!-- PAGE: My Data (Custom Input) -->
+            <main class="page" id="page-mydata">
+                <section class="hero hero-compact">
+                    <p class="hero-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                        Personalised Intelligence
+                    </p>
+                    <h1 class="hero-title">Your Data, Your Insights</h1>
+                    <p class="hero-sub">Input your supplier payment data and let PayPulse's AI models analyse your unique business health — just like a personalised financial health tracker.</p>
+                </section>
+
+                <!-- Progress Steps -->
+                <section class="mydata-steps">
+                    <div class="mydata-step-indicator">
+                        <div class="mydata-step-dot active" data-step="1"><span>1</span></div>
+                        <div class="mydata-step-line"></div>
+                        <div class="mydata-step-dot" data-step="2"><span>2</span></div>
+                        <div class="mydata-step-line"></div>
+                        <div class="mydata-step-dot" data-step="3"><span>3</span></div>
+                    </div>
+                    <div class="mydata-step-labels">
+                        <span class="active">Add Suppliers</span>
+                        <span>Log Payments</span>
+                        <span>AI Analysis</span>
+                    </div>
+                </section>
+
+                <!-- Step 1: Add Suppliers -->
+                <section class="mydata-section" id="mydata-step1">
+                    <h2 class="section-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                        Step 1: Add Your Suppliers
+                    </h2>
+                    <div class="mydata-add-form">
+                        <div class="mydata-form-row">
+                            <div class="form-group">
+                                <label for="mydata-supplier-name">Supplier Name</label>
+                                <input type="text" id="mydata-supplier-name" placeholder="e.g. Acme Logistics Ltd" autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label for="mydata-supplier-terms">Payment Terms (days)</label>
+                                <input type="number" id="mydata-supplier-terms" placeholder="e.g. 21" min="1" max="120" value="21">
+                            </div>
+                            <div class="form-group">
+                                <label for="mydata-supplier-invoice">Avg Invoice (₹)</label>
+                                <input type="number" id="mydata-supplier-invoice" placeholder="e.g. 50000" min="100" value="50000">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="mydata-add-supplier-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add Supplier
+                        </button>
+                    </div>
+
+                    <div class="mydata-suppliers-grid" id="mydata-suppliers-grid">
+                        <!-- Supplier cards rendered dynamically -->
+                    </div>
+
+                    <div class="mydata-empty-state" id="mydata-empty-suppliers">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="40" height="40"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                        <p>No suppliers added yet</p>
+                        <span>Add at least 2 suppliers to enable AI analysis</span>
+                    </div>
+
+                    <button class="btn btn-primary btn-full mydata-next-btn" id="mydata-goto-step2" style="display:none;">
+                        Continue to Payment Logging
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </section>
+
+                <!-- Step 2: Log Payments -->
+                <section class="mydata-section" id="mydata-step2" style="display:none;">
+                    <h2 class="section-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        Step 2: Log Weekly Payments
+                    </h2>
+
+                    <div class="mydata-payment-form">
+                        <div class="mydata-form-row">
+                            <div class="form-group">
+                                <label for="mydata-pay-supplier">Supplier</label>
+                                <select id="mydata-pay-supplier" class="form-select"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="mydata-pay-week">Week #</label>
+                                <input type="number" id="mydata-pay-week" min="1" max="52" value="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="mydata-pay-delay">Payment Delay (days)</label>
+                                <input type="number" id="mydata-pay-delay" min="0" max="120" value="15">
+                            </div>
+                            <div class="form-group">
+                                <label for="mydata-pay-invoice">Invoice Amount (₹)</label>
+                                <input type="number" id="mydata-pay-invoice" min="100" value="50000">
+                            </div>
+                        </div>
+                        <div class="mydata-payment-actions">
+                            <button class="btn btn-primary" id="mydata-add-payment-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add Entry
+                            </button>
+                            <button class="btn btn-outline" id="mydata-quickfill-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                                Quick Fill 12 Weeks
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Quick Fill Profile Selector -->
+                    <div class="mydata-quickfill-panel" id="mydata-quickfill-panel" style="display:none;">
+                        <p class="mydata-quickfill-title">Choose a payment health profile to auto-generate data:</p>
+                        <div class="mydata-profile-grid">
+                            <button class="mydata-profile-btn profile-healthy" data-profile="healthy">
+                                <span class="profile-icon">💚</span>
+                                <span class="profile-name">Healthy</span>
+                                <span class="profile-desc">Payments within terms, minimal delays</span>
+                            </button>
+                            <button class="mydata-profile-btn profile-drifting" data-profile="drifting">
+                                <span class="profile-icon">🟡</span>
+                                <span class="profile-name">Drifting</span>
+                                <span class="profile-desc">Gradually increasing payment delays</span>
+                            </button>
+                            <button class="mydata-profile-btn profile-stressed" data-profile="stressed">
+                                <span class="profile-icon">🔴</span>
+                                <span class="profile-name">Stressed</span>
+                                <span class="profile-desc">Severe delays with payment triage</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Payment Entries Table -->
+                    <div class="mydata-payments-table-wrap" id="mydata-payments-table-wrap">
+                        <div class="mydata-payments-header">
+                            <span>Week</span>
+                            <span>Supplier</span>
+                            <span>Delay</span>
+                            <span>Invoice</span>
+                            <span></span>
+                        </div>
+                        <div class="mydata-payments-list" id="mydata-payments-list">
+                            <!-- Entries rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="mydata-empty-state" id="mydata-empty-payments">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="40" height="40"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <p>No payment entries yet</p>
+                        <span>Add entries manually or use Quick Fill to generate sample data</span>
+                    </div>
+
+                    <div class="mydata-step2-nav">
+                        <button class="btn btn-outline" id="mydata-back-step1">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg>
+                            Back to Suppliers
+                        </button>
+                        <button class="btn btn-primary mydata-next-btn" id="mydata-goto-step3" style="display:none;">
+                            Run AI Analysis
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Step 3: AI Analysis Results -->
+                <section class="mydata-section" id="mydata-step3" style="display:none;">
+                    <h2 class="section-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+                        Step 3: AI Analysis Results
+                    </h2>
+
+                    <!-- Analysis Loading -->
+                    <div class="mydata-analyzing" id="mydata-analyzing">
+                        <div class="spinner"></div>
+                        <span>Running AI models on your data...</span>
+                    </div>
+
+                    <!-- Results Dashboard -->
+                    <div id="mydata-results" style="display:none;">
+                        <!-- Risk Overview Cards -->
+                        <div class="mydata-results-cards">
+                            <div class="mydata-result-card">
+                                <span class="mydata-result-label">Risk Level</span>
+                                <span class="mydata-result-badge" id="mydata-risk-badge">—</span>
+                                <span class="mydata-result-sub" id="mydata-risk-sub"></span>
+                            </div>
+                            <div class="mydata-result-card">
+                                <span class="mydata-result-label">Triage Status</span>
+                                <span class="mydata-result-value" id="mydata-triage-status">—</span>
+                                <span class="mydata-result-sub" id="mydata-triage-sub"></span>
+                            </div>
+                            <div class="mydata-result-card">
+                                <span class="mydata-result-label">Triage Score</span>
+                                <span class="mydata-result-value" id="mydata-triage-score">—</span>
+                                <div class="mydata-score-bar-wrap">
+                                    <div class="mydata-score-bar" id="mydata-score-bar" style="width:0%"></div>
+                                </div>
+                            </div>
+                            <div class="mydata-result-card">
+                                <span class="mydata-result-label">Anomalies</span>
+                                <span class="mydata-result-value" id="mydata-anomaly-count">—</span>
+                                <span class="mydata-result-sub" id="mydata-anomaly-sub"></span>
+                            </div>
+                        </div>
+
+                        <!-- AI Narrative -->
+                        <div class="mydata-narrative-card" id="mydata-narrative-card">
+                            <div class="mydata-narrative-header">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+                                <h3>AI Intelligence Summary</h3>
+                            </div>
+                            <p id="mydata-narrative-text"></p>
+                        </div>
+
+                        <!-- Forecast Chart -->
+                        <div class="mydata-chart-section">
+                            <h3 class="section-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                Payment Delay Trends
+                            </h3>
+                            <div class="chart-wrap">
+                                <canvas id="mydata-trend-chart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Supplier Breakdown -->
+                        <div class="mydata-supplier-breakdown">
+                            <h3 class="section-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                                Supplier Risk Breakdown
+                            </h3>
+                            <div class="mydata-breakdown-list" id="mydata-breakdown-list"></div>
+                        </div>
+
+                        <!-- Recommendations -->
+                        <div class="mydata-recommendations" id="mydata-recommendations">
+                            <h3 class="section-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                Recommended Actions
+                            </h3>
+                            <div id="mydata-rec-list"></div>
+                        </div>
+
+                        <div class="mydata-step3-nav">
+                            <button class="btn btn-outline" id="mydata-back-step2">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg>
+                                Back to Payments
+                            </button>
+                            <button class="btn btn-primary" id="mydata-reanalyze">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                                Re-Analyze
+                            </button>
+                        </div>
                     </div>
                 </section>
             </main>

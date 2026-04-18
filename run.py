@@ -10,6 +10,12 @@ Usage:
 import sys
 import os
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Ensure the project root is on the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
