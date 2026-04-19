@@ -1,0 +1,1 @@
+{"ts": "2026-04-19T05:13:06.870153+00:00", "request_id": "ea2037d8-fa6f-4beb-8f94-6c2750ec8eb9", "endpoint": "/api/contagion/simulate", "model_id": "paypulse-contagion-v1", "subject_id": "C0001", "features_hash": "sha1:8147b3fe6e9d3c73197c20c5032c6eaf7b65aa4f", "output": {"n_impacted": 1, "exposure_at_risk": 4316091.63}, "reason_codes": []}
