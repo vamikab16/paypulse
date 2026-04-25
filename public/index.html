@@ -425,18 +425,6 @@
                 <!-- ═══ SME VIEW ═══ -->
                 <div id="dashboard-content" style="display:none;">
                     <div id="sme-view">
-                        <!-- Early Detection Banner -->
-                        <section class="early-detect" id="early-detect">
-                            <div class="early-detect-inner">
-                                <svg class="early-detect-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                <div class="early-detect-text">
-                                    <span class="early-detect-label">PayPulse detected this stress</span>
-                                    <span class="early-detect-number" id="early-detect-days">34</span>
-                                    <span class="early-detect-label">days before traditional credit signals</span>
-                                </div>
-                            </div>
-                        </section>
-
                         <section class="hero hero-compact">
                             <h1 class="hero-title" id="hero-title">Hidden Financial Stress Detected</h1>
                             <div class="status-compare">
@@ -536,6 +524,49 @@
                                     <div class="triage-score-bar" id="triage-score-bar" style="width:0%"></div>
                                 </div>
                                 <p class="triage-score-explanation" id="triage-score-explanation"></p>
+                            </div>
+                        </section>
+
+                        <!-- AI Default Prediction -->
+                        <section class="default-prediction-section" id="default-prediction-section" style="display:none;">
+                            <h2 class="section-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                AI Default Prediction
+                                <span class="dp-model-tag">Ensemble</span>
+                            </h2>
+                            <div class="dp-card" id="dp-card">
+                                <!-- Main countdown -->
+                                <div class="dp-hero-row">
+                                    <div class="dp-countdown">
+                                        <span class="dp-countdown-number" id="dp-days">—</span>
+                                        <span class="dp-countdown-unit" id="dp-unit">days</span>
+                                    </div>
+                                    <div class="dp-hero-meta">
+                                        <span class="dp-headline" id="dp-headline">Estimated time to default</span>
+                                        <span class="dp-confidence-label">Confidence interval</span>
+                                        <span class="dp-confidence-range" id="dp-confidence-range">—</span>
+                                    </div>
+                                </div>
+
+                                <!-- Urgency bar -->
+                                <div class="dp-urgency-bar-wrap">
+                                    <div class="dp-urgency-labels">
+                                        <span>Imminent</span>
+                                        <span>Near-term</span>
+                                        <span>Extended</span>
+                                    </div>
+                                    <div class="dp-urgency-track">
+                                        <div class="dp-urgency-fill" id="dp-urgency-fill" style="width:0%"></div>
+                                        <div class="dp-urgency-marker" id="dp-urgency-marker" style="left:0%"></div>
+                                    </div>
+                                    <div class="dp-urgency-scale">
+                                        <span>0d</span>
+                                        <span>30d</span>
+                                        <span>60d</span>
+                                        <span>90d</span>
+                                        <span>120d+</span>
+                                    </div>
+                                </div>
                             </div>
                         </section>
 

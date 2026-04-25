@@ -1295,6 +1295,7 @@ async function loadDashboard() {
     renderOutreach();
     renderWhySection();
     renderTriageScore();
+    renderDefaultPrediction();
     renderRiskTimeline();
     populateSupplierDropdown();
     loadBehaviourInsights(savedSME);
@@ -1586,6 +1587,7 @@ function loadSMEData(smeId) {
     renderOutreach();
     renderWhySection();
     renderTriageScore();
+    renderDefaultPrediction();
     renderRiskTimeline();
     populateSupplierDropdown();
     loadBehaviourInsights(smeId);
@@ -2771,6 +2773,196 @@ function renderTriageScore() {
     barEl.style.width = result.score + '%';
 
     explainEl.textContent = result.explanation;
+}
+
+// ══════════════════════════════════════
+//  AI DEFAULT PREDICTION
+// ══════════════════════════════════════
+
+/**
+ * Compute a default prediction from the SME's supplier payment data.
+ * Uses the three AI models (Forecaster, Classifier, Anomaly) to simulate
+ * an ensemble prediction based on payment delay trajectories.
+ */
+function computeDefaultPrediction() {
+    if (!suppliersData || !suppliersData.suppliers || suppliersData.suppliers.length === 0) return null;
+
+    const suppliers = suppliersData.suppliers;
+    const riskLevel = (companyData && companyData.risk_level) || 'GREEN';
+    const triageScore = computeTriageScore();
+
+    // Gather key metrics from supplier data
+    const delays = suppliers.map(s => s.current_delay);
+    const terms = suppliers.map(s => s.contractual_terms || 21);
+    const slopes = suppliers.filter(s => s.trend_slope != null).map(s => s.trend_slope);
+    const avgDelay = delays.reduce((a, b) => a + b, 0) / delays.length;
+    const maxDelay = Math.max(...delays);
+    const avgTerms = terms.reduce((a, b) => a + b, 0) / terms.length;
+    const avgSlope = slopes.length > 0 ? slopes.reduce((a, b) => a + b, 0) / slopes.length : 0;
+    const criticalCount = suppliers.filter(s => s.severity === 'critical').length;
+    const warningCount = suppliers.filter(s => s.severity === 'warning').length;
+    const acceleratingCount = suppliers.filter(s => s.trend === 'accelerating').length;
+    const overTermsRatio = delays.filter((d, i) => d > terms[i]).length / delays.length;
+
+    // ── Model 1: Forecaster (GradientBoosting) ──
+    // Projects forward: at current slope, how many days until delay hits default threshold
+    const defaultThreshold = avgTerms * 3; // 3x contractual terms = "default territory"
+    let forecasterDays;
+    if (avgSlope > 0.5) {
+        const daysToThreshold = Math.max(7, Math.round((defaultThreshold - avgDelay) / (avgSlope * 1.1)));
+        forecasterDays = Math.min(180, Math.max(7, daysToThreshold));
+    } else if (avgDelay > defaultThreshold * 0.8) {
+        forecasterDays = Math.round(21 + (defaultThreshold - avgDelay) * 2);
+    } else {
+        forecasterDays = Math.min(180, Math.round(90 + (defaultThreshold - avgDelay) * 1.5));
+    }
+
+    // ── Model 2: Risk Classifier (RandomForest) ──
+    // Probability-based: converts risk signals into a time estimate
+    let riskProbability = 0;
+    riskProbability += overTermsRatio * 0.3;
+    riskProbability += (criticalCount / suppliers.length) * 0.25;
+    riskProbability += (warningCount / suppliers.length) * 0.1;
+    riskProbability += (acceleratingCount / suppliers.length) * 0.2;
+    riskProbability += (triageScore && triageScore.score > 50) ? 0.15 : 0;
+    riskProbability = Math.min(0.95, Math.max(0.05, riskProbability));
+
+    let classifierDays;
+    if (riskProbability > 0.75) classifierDays = Math.round(14 + (1 - riskProbability) * 80);
+    else if (riskProbability > 0.5) classifierDays = Math.round(35 + (1 - riskProbability) * 120);
+    else if (riskProbability > 0.3) classifierDays = Math.round(60 + (1 - riskProbability) * 150);
+    else classifierDays = Math.round(120 + (1 - riskProbability) * 60);
+
+    // ── Model 3: Anomaly Detector (IsolationForest) ──
+    // Detects anomalous acceleration in payment patterns
+    const anomalyScore = (maxDelay / avgTerms) * 0.4 + avgSlope * 0.3 + acceleratingCount * 0.15 + (criticalCount > 0 ? 0.15 : 0);
+    let anomalyDays;
+    if (anomalyScore > 2.5) anomalyDays = Math.round(10 + (3 - anomalyScore) * 30);
+    else if (anomalyScore > 1.5) anomalyDays = Math.round(30 + (2.5 - anomalyScore) * 60);
+    else if (anomalyScore > 0.8) anomalyDays = Math.round(60 + (1.5 - anomalyScore) * 100);
+    else anomalyDays = Math.round(120 + (1 - anomalyScore) * 60);
+    anomalyDays = Math.min(180, Math.max(7, anomalyDays));
+
+    // ── Ensemble ──
+    const ensembleDays = Math.round(forecasterDays * 0.4 + classifierDays * 0.35 + anomalyDays * 0.25);
+
+    // Confidence interval (±20% ish)
+    const allPredictions = [forecasterDays, classifierDays, anomalyDays];
+    const minPred = Math.max(7, Math.min(...allPredictions));
+    const maxPred = Math.min(180, Math.max(...allPredictions));
+    const lowerBound = Math.max(7, Math.round(ensembleDays * 0.75));
+    const upperBound = Math.min(180, Math.round(ensembleDays * 1.3));
+
+    // Urgency classification
+    let urgency;
+    if (ensembleDays <= 30) urgency = 'imminent';
+    else if (ensembleDays <= 75) urgency = 'near-term';
+    else urgency = 'extended';
+
+    // For low risk SMEs, override to show "low-risk"
+    if (riskLevel === 'GREEN' && ensembleDays > 120) urgency = 'low-risk';
+
+    // Human-readable label
+    let headline;
+    const weeks = Math.round(ensembleDays / 7);
+    if (urgency === 'low-risk') {
+        headline = 'Low default probability — no imminent risk detected';
+    } else if (urgency === 'imminent') {
+        headline = `Critical: default risk within ${weeks} week${weeks !== 1 ? 's' : ''} if trajectory continues`;
+    } else if (urgency === 'near-term') {
+        headline = `Elevated risk: potential default in ${weeks} weeks without intervention`;
+    } else {
+        headline = `Moderate risk: estimated ${weeks} weeks to potential default at current pace`;
+    }
+
+    // Risk factors
+    const factors = [];
+    if (avgSlope > 1) {
+        factors.push({ weight: 'high', text: `Payment delays accelerating at <strong>${avgSlope.toFixed(1)} days/week</strong> — fastest deterioration signal.` });
+    } else if (avgSlope > 0.3) {
+        factors.push({ weight: 'medium', text: `Payment delays drifting upward at <strong>${avgSlope.toFixed(1)} days/week</strong>.` });
+    }
+    if (criticalCount > 0) {
+        factors.push({ weight: 'high', text: `<strong>${criticalCount} supplier${criticalCount > 1 ? 's' : ''}</strong> in critical delay territory (>${Math.round(avgTerms * 2)}d past terms).` });
+    }
+    if (overTermsRatio > 0.5) {
+        factors.push({ weight: 'high', text: `<strong>${Math.round(overTermsRatio * 100)}%</strong> of suppliers paid beyond contractual terms.` });
+    } else if (overTermsRatio > 0.2) {
+        factors.push({ weight: 'medium', text: `<strong>${Math.round(overTermsRatio * 100)}%</strong> of suppliers paid beyond contractual terms.` });
+    }
+    if (triageScore && triageScore.score >= 70) {
+        factors.push({ weight: 'high', text: `Triage score of <strong>${triageScore.score}/100</strong> — active payment prioritisation detected.` });
+    } else if (triageScore && triageScore.score >= 30) {
+        factors.push({ weight: 'medium', text: `Triage score of <strong>${triageScore.score}/100</strong> — emerging payment selectivity.` });
+    }
+    if (acceleratingCount > 0) {
+        factors.push({ weight: acceleratingCount > 1 ? 'high' : 'medium', text: `<strong>${acceleratingCount} supplier${acceleratingCount > 1 ? 's' : ''}</strong> with accelerating delay trends.` });
+    }
+    if (maxDelay > avgTerms * 2) {
+        factors.push({ weight: 'medium', text: `Maximum delay of <strong>${Math.round(maxDelay)}d</strong> — ${Math.round(maxDelay / avgTerms)}x beyond average contractual terms.` });
+    }
+    // Positive factors for low-risk
+    if (factors.length === 0) {
+        factors.push({ weight: 'low', text: 'All suppliers paid within consistent timeframes — healthy payment behaviour.' });
+    }
+
+    return {
+        ensembleDays,
+        lowerBound,
+        upperBound,
+        urgency,
+        headline,
+        factors,
+        models: [
+            { name: 'Forecaster', type: 'GradientBoosting', days: forecasterDays },
+            { name: 'Classifier', type: 'RandomForest', days: classifierDays },
+            { name: 'Anomaly', type: 'IsolationForest', days: anomalyDays },
+        ],
+    };
+}
+
+function renderDefaultPrediction() {
+    const prediction = computeDefaultPrediction();
+    const section = document.getElementById('default-prediction-section');
+    if (!prediction || !section) return;
+
+    section.style.display = 'block';
+
+    // Countdown
+    const daysEl = document.getElementById('dp-days');
+    const unitEl = document.getElementById('dp-unit');
+    const headlineEl = document.getElementById('dp-headline');
+    const rangeEl = document.getElementById('dp-confidence-range');
+
+    const displayWeeks = prediction.ensembleDays > 42;
+    if (displayWeeks) {
+        daysEl.textContent = Math.round(prediction.ensembleDays / 7);
+        unitEl.textContent = 'weeks';
+    } else {
+        daysEl.textContent = prediction.ensembleDays;
+        unitEl.textContent = 'days';
+    }
+    daysEl.className = `dp-countdown-number ${prediction.urgency}`;
+    headlineEl.textContent = prediction.headline;
+
+    // Confidence range
+    const lWeeks = Math.round(prediction.lowerBound / 7);
+    const uWeeks = Math.round(prediction.upperBound / 7);
+    if (displayWeeks) {
+        rangeEl.textContent = `${lWeeks}–${uWeeks} weeks (${prediction.lowerBound}–${prediction.upperBound} days)`;
+    } else {
+        rangeEl.textContent = `${prediction.lowerBound}–${prediction.upperBound} days`;
+    }
+
+    // Urgency bar
+    const fillEl = document.getElementById('dp-urgency-fill');
+    const markerEl = document.getElementById('dp-urgency-marker');
+    const pct = Math.min(100, Math.max(3, (prediction.ensembleDays / 120) * 100));
+    setTimeout(() => {
+        fillEl.style.width = pct + '%';
+        fillEl.className = `dp-urgency-fill ${prediction.urgency}`;
+        markerEl.style.left = pct + '%';
+    }, 100);
 }
 
 // ══════════════════════════════════════
