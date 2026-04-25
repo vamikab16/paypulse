@@ -811,19 +811,23 @@ async def get_insights_all():
 
 
 @app.get("/api/insights/{sme_id}")
-async def get_insights(sme_id: str):
+async def get_insights(sme_id: str, viewer: str = "sme"):
     """Return AI-generated behavioural insights for a single SME.
+
+    viewer: 'sme' (default) → business-facing behavioural guidance
+            'bank'          → RM-facing action recommendations
 
     Uses Groq LLM (Llama 3.3 70B) when GROQ_API_KEY is set;
     falls back to heuristic generation otherwise.
-    Results are cached per SME for the server lifetime.
+    Results are cached per (SME, viewer) pair for the server lifetime.
     """
     if sme_id not in SME_DATABASE:
         return JSONResponse(
             status_code=404,
             content={"error": f"Unknown SME: {sme_id}"},
         )
-    result = await get_sme_insights(sme_id)
+    viewer_context = "bank" if viewer == "bank" else "sme"
+    result = await get_sme_insights(sme_id, viewer=viewer_context)
     return sanitize_for_json(result)
 
 

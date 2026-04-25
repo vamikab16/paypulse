@@ -28,6 +28,7 @@ let trendChart = null;
 let bankTrendChart = null;
 let scenarioChart = null;
 let currentViewMode = 'sme'; // 'sme' or 'bank'
+let insightsViewerContext = 'sme'; // 'sme' or 'bank' — controls which insight tone is fetched
 
 // ── Fallback demo data ──
 const FALLBACK = {
@@ -1597,6 +1598,7 @@ function loadSMEData(smeId) {
  * Switch from bank view to SME view for a specific business.
  */
 function switchToSMEView(smeId) {
+    insightsViewerContext = 'bank'; // RM is drilling down — use bank-facing insights
     // Load the selected SME's data
     loadSMEData(smeId);
 
@@ -1635,6 +1637,7 @@ function switchToSMEView(smeId) {
  * Switch back to bank portfolio view from SME view.
  */
 function switchToBankView() {
+    insightsViewerContext = 'sme'; // reset so next SME-owner login gets SME-facing insights
     selectedSME = null;
     localStorage.removeItem('selectedSME');
 
@@ -6016,6 +6019,17 @@ async function loadBehaviourInsights(smeId) {
 
     if (!skeletonEl || !cardEl) return;
 
+    // Update section label based on who is viewing
+    const sectionLabel = document.querySelector('#insights-section .section-label');
+    if (sectionLabel) {
+        const lastNode = sectionLabel.lastChild;
+        if (lastNode && lastNode.nodeType === Node.TEXT_NODE) {
+            lastNode.textContent = insightsViewerContext === 'bank'
+                ? ' RM Action Insights'
+                : ' AI Behaviour Insights';
+        }
+    }
+
     // Show loading state
     skeletonEl.style.display = 'flex';
     cardEl.style.display = 'none';
@@ -6025,14 +6039,14 @@ async function loadBehaviourInsights(smeId) {
     const effectiveId = smeId || 'meridian';
 
     try {
-        const resp = await fetch(`${API_BASE}/api/insights/${effectiveId}`);
+        const resp = await fetch(`${API_BASE}/api/insights/${effectiveId}?viewer=${insightsViewerContext}`);
         if (!resp.ok) throw new Error(resp.status);
         const data = await resp.json();
         renderBehaviourInsights(data);
     } catch (err) {
         console.warn('Insights API unavailable, generating locally:', err.message);
         // Generate locally from SME_DATA
-        const localInsights = generateLocalInsights(effectiveId);
+        const localInsights = generateLocalInsights(effectiveId, insightsViewerContext);
         renderBehaviourInsights(localInsights);
     }
 }
@@ -6117,10 +6131,11 @@ function classifyIssueSeverity(issue) {
  * Generate insights locally using AnalysisEngine data when API is unavailable.
  * Mirrors the backend heuristic fallback logic.
  */
-function generateLocalInsights(smeId) {
+function generateLocalInsights(smeId, viewer = 'sme') {
     const sme = SME_DATA[smeId];
     if (!sme) return { error: 'Unknown SME' };
 
+    const isBank = viewer === 'bank';
     const suppliers = (sme.suppliers && sme.suppliers.suppliers) || [];
     const delays = suppliers.map(s => s.current_delay);
     const risk = AnalysisEngine.calculateRisk(delays);
@@ -6133,57 +6148,78 @@ function generateLocalInsights(smeId) {
     const accelSuppliers = suppliers.filter(s => s.trend === 'accelerating');
     const driftCount = suppliers.filter(s => s.trend === 'drifting').length;
 
-    // Summary
+    // Summary — bank RM gets risk-assessment language; SME owner gets self-facing language
     let summary;
-    if (risk === 'RED') {
-        summary = `${sme.name} is experiencing significant payment delays across multiple suppliers, with an average delay of ${avgDelay} days and ${criticalCount} supplier(s) in critical status.`;
-    } else if (risk === 'AMBER') {
-        summary = `${sme.name} shows emerging payment stress with average delays of ${avgDelay} days and widening spread across suppliers.`;
+    if (isBank) {
+        if (risk === 'RED') summary = `${sme.name} is HIGH risk — payment triage detected with ${criticalCount} supplier(s) in critical delay. Immediate RM outreach recommended.`;
+        else if (risk === 'AMBER') summary = `${sme.name} shows MEDIUM risk — emerging payment stress, average delays ${avgDelay} days. Schedule a review call.`;
+        else summary = `${sme.name} is LOW risk — payment patterns are stable. Continue standard monitoring.`;
     } else {
-        summary = `${sme.name} maintains consistent payment patterns with an average delay of ${avgDelay} days — within healthy operating range.`;
+        if (risk === 'RED') summary = `Your business is experiencing significant payment delays across multiple suppliers, with an average delay of ${avgDelay} days and ${criticalCount} supplier(s) in critical status.`;
+        else if (risk === 'AMBER') summary = `Your business shows emerging payment stress with average delays of ${avgDelay} days and a widening gap across suppliers.`;
+        else summary = `Your business maintains consistent payment patterns with an average delay of ${avgDelay} days — within healthy operating range.`;
     }
 
     // Key issues
     const key_issues = [];
     if (triageDetected) {
-        key_issues.push('Selective payment prioritisation detected — some suppliers are being paid on time while others face growing delays');
+        key_issues.push(isBank
+            ? 'Payment triage detected — client is paying some suppliers on time while delaying others (recognised early distress signal)'
+            : 'You are paying some suppliers on time while others face growing delays — this pattern can strain supplier relationships');
     }
     if (accelSuppliers.length > 0) {
         const names = accelSuppliers.map(s => s.supplier_name).join(', ');
-        key_issues.push(`Payment delays are accelerating for ${names}, suggesting increasing cash flow pressure`);
+        key_issues.push(isBank
+            ? `Delays are accelerating for ${names} — trajectory points toward further deterioration without intervention`
+            : `Payment delays to ${names} are getting worse each week — acting early can help prevent relationship damage`);
     }
     if (spread > 20) {
-        key_issues.push(`Payment spread of ${spread} days between fastest and slowest-paid suppliers indicates uneven cash allocation`);
+        key_issues.push(isBank
+            ? `Payment spread of ${spread} days signals selective prioritisation — client is managing liquidity by delaying specific suppliers`
+            : `There is a ${spread}-day gap between your fastest and slowest paid suppliers, suggesting uneven cash allocation`);
     }
-    if (criticalCount > 0) {
-        key_issues.push(`${criticalCount} supplier relationship(s) have reached critical delay levels beyond contractual terms`);
-    }
-    if (driftCount > 0 && accelSuppliers.length === 0) {
-        key_issues.push(`Gradual upward drift in ${driftCount} supplier payment(s) may signal emerging financial pressure`);
+    if (criticalCount > 0 && !triageDetected) {
+        key_issues.push(isBank
+            ? `${criticalCount} supplier(s) past critical delay thresholds — credit exposure to these relationships is elevated`
+            : `${criticalCount} supplier relationship(s) are significantly overdue — these may need immediate attention`);
     }
     if (key_issues.length === 0) {
-        key_issues.push('No significant payment behaviour anomalies detected');
+        key_issues.push(isBank ? 'No significant risk signals detected — client appears stable' : 'No significant payment behaviour anomalies detected');
     }
 
-    // Suggestions
+    // Suggestions — completely different per viewer
     let suggestions;
-    if (risk === 'RED') {
-        suggestions = [
-            'Reviewing overall payment scheduling could help reduce supplier concentration risk',
-            'Engaging with suppliers showing the longest delays early may help preserve relationships',
-            'Considering a more even distribution of payment timing across suppliers could stabilise operations',
+    if (isBank) {
+        if (risk === 'RED') suggestions = [
+            'Schedule an urgent outreach call with the client\'s primary contact within 48 hours',
+            'Review the client\'s current credit facility and overdraft utilisation',
+            'Consider escalating to the Credit Committee if delays continue to accelerate',
         ];
-    } else if (risk === 'AMBER') {
-        suggestions = [
-            'Monitoring the widening gap between on-time and delayed payments could provide early warning of further stress',
-            'Exploring whether payment timing adjustments may help maintain supplier confidence',
-            'Regular review of payment spread trends could support proactive cash flow management',
+        else if (risk === 'AMBER') suggestions = [
+            'Schedule a proactive check-in call with the client this week',
+            'Offer NatWest cash flow management or invoice financing products',
+            'Set a 2-week monitoring alert to track whether delays continue drifting',
+        ];
+        else suggestions = [
+            'Continue standard periodic monitoring — no immediate action required',
+            'Note positive payment behaviour in the client\'s file',
+            'Consider this client for relationship development opportunities',
         ];
     } else {
-        suggestions = [
-            'Continuing current payment discipline may help maintain stable supplier relationships',
-            'Periodic review of payment patterns could help identify any emerging drift early',
-            'Maintaining visibility of supplier payment terms relative to actual timing could support ongoing health',
+        if (risk === 'RED') suggestions = [
+            'Consider speaking to your NatWest relationship manager about cash flow support options',
+            'Reaching out to your most-delayed suppliers early may help preserve those relationships',
+            'Reviewing your payment schedule to distribute payments more evenly could reduce pressure',
+        ];
+        else if (risk === 'AMBER') suggestions = [
+            'Keeping an eye on the widening gap between on-time and delayed payments could give you early warning',
+            'Exploring whether small adjustments to payment timing could maintain supplier confidence',
+            'Regular review of your payment spread trends could support proactive cash flow management',
+        ];
+        else suggestions = [
+            'Continuing your current payment discipline helps maintain strong supplier relationships',
+            'Periodic review of payment patterns can help catch any emerging drift early',
+            'Maintaining visibility of your payment terms vs actual timing supports ongoing financial health',
         ];
     }
 
@@ -6191,32 +6227,39 @@ function generateLocalInsights(smeId) {
     const priority_focus = [];
     if (criticalCount > 0) {
         const critNames = suppliers.filter(s => s.severity === 'critical').map(s => s.supplier_name).join(', ');
-        priority_focus.push(`Suppliers in critical delay: ${critNames}`);
+        priority_focus.push(isBank
+            ? `Immediate outreach regarding: ${critNames}`
+            : `Most overdue suppliers: ${critNames}`);
     }
     if (triageDetected) {
-        priority_focus.push('Closing the gap between fastest-paid and most-delayed suppliers');
+        priority_focus.push(isBank
+            ? 'Investigate the payment triage pattern — discuss cash flow position with client'
+            : 'Closing the payment gap between your fastest and most-delayed suppliers');
     }
-    if (accelSuppliers.length > 0) {
-        priority_focus.push('Suppliers with accelerating delay trends');
+    if (accelSuppliers.length > 0 && priority_focus.length === 0) {
+        priority_focus.push(isBank ? 'Monitor accelerating delay trajectory — set escalation trigger' : 'Suppliers with worsening payment trends need attention first');
     }
     if (priority_focus.length === 0) {
-        priority_focus.push('Routine monitoring — no urgent focus areas identified');
+        priority_focus.push(isBank ? 'Routine monitoring — no urgent RM actions required' : 'Routine monitoring — no urgent focus areas identified');
     }
 
     // Expected impact
     let expected_impact;
-    if (risk === 'RED') {
-        expected_impact = 'Addressing the most delayed supplier relationships and reducing payment spread could help move the risk profile from high toward medium over 4–8 weeks, potentially preserving key supplier partnerships.';
-    } else if (risk === 'AMBER') {
-        expected_impact = 'Stabilising payment timing and preventing further drift could help maintain the current risk level and reduce the chance of escalation to high risk.';
+    if (isBank) {
+        if (risk === 'RED') expected_impact = 'Early RM engagement opens a 4–8 week window to restructure payment arrangements, reducing default likelihood and protecting the bank\'s lending relationship.';
+        else if (risk === 'AMBER') expected_impact = 'Proactive outreach now can prevent escalation to high risk. Offering appropriate support products may stabilise the client\'s cash flow before supplier relationships are damaged.';
+        else expected_impact = 'No intervention needed. Continued monitoring ensures any emerging stress is caught early in future periods.';
     } else {
-        expected_impact = 'Maintaining current payment behaviour supports a stable risk profile. Continued consistency may reinforce supplier confidence over time.';
+        if (risk === 'RED') expected_impact = 'Addressing your most delayed supplier relationships and spreading payments more evenly could help improve your risk profile over 4–8 weeks and preserve key supplier partnerships.';
+        else if (risk === 'AMBER') expected_impact = 'Stabilising your payment timing now could prevent further drift and reduce the chance of any supplier relationships becoming strained.';
+        else expected_impact = 'Maintaining your current payment behaviour supports a stable financial profile. Continued consistency reinforces supplier confidence over time.';
     }
 
     return {
         sme_id: smeId,
         sme_name: sme.name,
         source: 'heuristic',
+        viewer,
         summary,
         key_issues: key_issues.slice(0, 3),
         suggestions: suggestions.slice(0, 3),

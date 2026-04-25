@@ -81,25 +81,46 @@ SME_DATABASE: Dict[str, Dict[str, Any]] = {
 # Prompt construction
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """You are a financial behaviour insights assistant for a bank supporting SMEs.
+# Shown when an SME owner views their own dashboard — advice directed at the business
+_SYSTEM_PROMPT_SME = """You are a financial behaviour insights assistant helping an SME business owner understand their payment patterns.
 
-Your role is to analyse supplier payment patterns and generate high-level, non-prescriptive guidance to help stabilise cash flow behaviour.
+Your role is to analyse supplier payment data and give high-level, non-prescriptive guidance so the owner can improve their cash flow behaviour.
 
 IMPORTANT RULES:
+* Speak directly to the business owner (use "you" / "your business")
 * Do NOT provide financial advice or exact instructions
-* Do NOT suggest specific payment amounts or exact actions
-* Use neutral, suggestive language such as "consider", "may help", "could improve"
-* Focus only on behavioural patterns, not decisions
-* Keep output concise, clear, and business-friendly
-* Ensure the tone is supportive and non-judgmental
+* Do NOT suggest specific payment amounts
+* Use neutral, supportive language: "consider", "may help", "could improve"
+* Focus on behavioural patterns the owner can act on
+* Keep output concise, clear, and non-judgmental
 
 OUTPUT FORMAT (STRICT JSON ONLY — no markdown, no explanation, just the JSON object):
 {
-  "summary": "One-line explanation of current payment behaviour and risk",
-  "key_issues": ["Issue 1", "Issue 2", "Issue 3"],
-  "suggestions": ["General behavioural suggestion 1", "General behavioural suggestion 2", "General behavioural suggestion 3"],
-  "priority_focus": ["Type of supplier or behaviour to prioritise", "Area that needs stabilisation"],
-  "expected_impact": "How improving behaviour may reduce risk level over time"
+  "summary": "One-line explanation of current payment behaviour and risk for the business owner",
+  "key_issues": ["Issue 1 from the owner's perspective", "Issue 2", "Issue 3"],
+  "suggestions": ["Action the owner could consider", "Another behavioural suggestion", "Third suggestion"],
+  "priority_focus": ["Which supplier relationship to focus on", "Area needing stabilisation"],
+  "expected_impact": "How improving this behaviour may reduce risk for your business over time"
+}"""
+
+# Shown when a Bank RM drills into an SME from the portfolio view — advice directed at the RM
+_SYSTEM_PROMPT_BANK = """You are a risk intelligence assistant for a NatWest Relationship Manager reviewing an SME client's payment behaviour.
+
+Your role is to analyse supplier payment data and recommend concrete actions the RM should take to support the client and protect the bank's lending position.
+
+IMPORTANT RULES:
+* Speak directly to the RM (use "you should", "we recommend", "consider scheduling")
+* Be specific and action-oriented — the RM needs to know what to DO, not just what the SME is doing
+* Actions should be professional banking steps: outreach, credit review, escalation, support products
+* Keep output concise, clear, and decision-ready
+
+OUTPUT FORMAT (STRICT JSON ONLY — no markdown, no explanation, just the JSON object):
+{
+  "summary": "One-line assessment of this SME's risk status for the RM",
+  "key_issues": ["Risk signal 1 the RM should be aware of", "Risk signal 2", "Risk signal 3"],
+  "suggestions": ["Concrete RM action 1 (e.g. schedule outreach call)", "RM action 2 (e.g. review credit facility)", "RM action 3 (e.g. offer cash flow advisory)"],
+  "priority_focus": ["Most urgent RM action", "Secondary priority"],
+  "expected_impact": "How early RM intervention may prevent default and protect the lending relationship"
 }"""
 
 
@@ -189,7 +210,7 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
 
-async def _call_groq(user_prompt: str) -> Optional[Dict[str, Any]]:
+async def _call_groq(user_prompt: str, viewer: str = "sme") -> Optional[Dict[str, Any]]:
     """Call Groq API and return parsed JSON. Returns None on failure."""
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
@@ -206,10 +227,11 @@ async def _call_groq(user_prompt: str) -> Optional[Dict[str, Any]]:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    system_prompt = _SYSTEM_PROMPT_BANK if viewer == "bank" else _SYSTEM_PROMPT_SME
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.4,
@@ -243,111 +265,208 @@ async def _call_groq(user_prompt: str) -> Optional[Dict[str, Any]]:
 # Heuristic fallback (no LLM needed)
 # ---------------------------------------------------------------------------
 
-def _generate_fallback(sme_id: str, sme: Dict[str, Any]) -> Dict[str, Any]:
+def _generate_fallback(sme_id: str, sme: Dict[str, Any], viewer: str = "sme") -> Dict[str, Any]:
     """Generate a rule-based insight when Groq is unavailable."""
     metrics = _compute_sme_metrics(sme)
     risk = metrics["risk_level"]
     suppliers = sme["suppliers"]
+    is_bank = viewer == "bank"
 
     # Summary
-    if risk == "HIGH":
-        summary = (
-            f"{sme['name']} is experiencing significant payment delays across "
-            f"multiple suppliers, with an average delay of {metrics['avg_delay']} days "
-            f"and {metrics['critical_count']} supplier(s) in critical status."
-        )
-    elif risk == "MEDIUM":
-        summary = (
-            f"{sme['name']} shows emerging payment stress with average delays of "
-            f"{metrics['avg_delay']} days and widening spread across suppliers."
-        )
+    if is_bank:
+        if risk == "HIGH":
+            summary = (
+                f"{sme['name']} is HIGH risk — payment triage detected with "
+                f"{metrics['critical_count']} supplier(s) in critical delay. "
+                f"Immediate RM outreach recommended."
+            )
+        elif risk == "MEDIUM":
+            summary = (
+                f"{sme['name']} shows MEDIUM risk — emerging payment stress with "
+                f"average delays of {metrics['avg_delay']} days. Schedule a review call."
+            )
+        else:
+            summary = (
+                f"{sme['name']} is LOW risk — payment patterns are stable. "
+                f"Continue standard monitoring."
+            )
     else:
-        summary = (
-            f"{sme['name']} maintains consistent payment patterns with an average "
-            f"delay of {metrics['avg_delay']} days — within healthy operating range."
-        )
+        if risk == "HIGH":
+            summary = (
+                f"Your business is experiencing significant payment delays across "
+                f"multiple suppliers, with an average delay of {metrics['avg_delay']} days "
+                f"and {metrics['critical_count']} supplier(s) in critical status."
+            )
+        elif risk == "MEDIUM":
+            summary = (
+                f"Your business shows emerging payment stress with average delays of "
+                f"{metrics['avg_delay']} days and a widening gap across suppliers."
+            )
+        else:
+            summary = (
+                f"Your business maintains consistent payment patterns with an average "
+                f"delay of {metrics['avg_delay']} days — within healthy operating range."
+            )
 
-    # Key issues
+    # Key issues (same facts, but framed as risk signals for bank or owner observations)
     key_issues: List[str] = []
     if metrics["triage_detected"]:
-        key_issues.append(
-            "Selective payment prioritisation detected — some suppliers are being "
-            "paid on time while others face growing delays"
-        )
+        if is_bank:
+            key_issues.append(
+                "Payment triage detected — client is paying some suppliers on time "
+                "while others face critical delays (a recognised early distress signal)"
+            )
+        else:
+            key_issues.append(
+                "You are paying some suppliers on time while others face growing delays — "
+                "this pattern can strain supplier relationships over time"
+            )
     if metrics["accelerating_count"] > 0:
         names = [s["name"] for s in suppliers if s["trend"] == "accelerating"]
-        key_issues.append(
-            f"Payment delays are accelerating for {', '.join(names)}, "
-            f"suggesting increasing cash flow pressure"
-        )
+        if is_bank:
+            key_issues.append(
+                f"Delays are accelerating for {', '.join(names)} — "
+                f"trajectory points toward further deterioration without intervention"
+            )
+        else:
+            key_issues.append(
+                f"Payment delays to {', '.join(names)} are getting worse each week — "
+                f"acting early can help prevent relationship damage"
+            )
     if metrics["spread"] > 20:
-        key_issues.append(
-            f"Payment spread of {metrics['spread']} days between fastest and "
-            f"slowest-paid suppliers indicates uneven cash allocation"
-        )
-    if metrics["critical_count"] > 0:
-        key_issues.append(
-            f"{metrics['critical_count']} supplier relationship(s) have reached "
-            f"critical delay levels beyond contractual terms"
-        )
-    if metrics["drifting_count"] > 0 and metrics["accelerating_count"] == 0:
-        key_issues.append(
-            f"Gradual upward drift in {metrics['drifting_count']} supplier "
-            f"payment(s) may signal emerging financial pressure"
-        )
+        if is_bank:
+            key_issues.append(
+                f"Payment spread of {metrics['spread']} days signals selective prioritisation "
+                f"— the client is managing liquidity by delaying specific suppliers"
+            )
+        else:
+            key_issues.append(
+                f"There is a {metrics['spread']}-day gap between your fastest and slowest paid "
+                f"suppliers, suggesting uneven cash allocation"
+            )
+    if metrics["critical_count"] > 0 and not metrics["triage_detected"]:
+        if is_bank:
+            key_issues.append(
+                f"{metrics['critical_count']} supplier(s) are past critical delay thresholds — "
+                f"credit exposure to these relationships is elevated"
+            )
+        else:
+            key_issues.append(
+                f"{metrics['critical_count']} supplier relationship(s) are significantly "
+                f"overdue — these may need immediate attention"
+            )
     if not key_issues:
-        key_issues.append("No significant payment behaviour anomalies detected")
+        key_issues.append(
+            "No significant risk signals detected — client appears stable"
+            if is_bank else
+            "No significant payment behaviour anomalies detected"
+        )
 
-    # Suggestions
+    # Suggestions — completely different for bank vs SME
     suggestions: List[str] = []
-    if risk == "HIGH":
-        suggestions.extend([
-            "Reviewing overall payment scheduling could help reduce supplier concentration risk",
-            "Engaging with suppliers showing the longest delays early may help preserve relationships",
-            "Considering a more even distribution of payment timing across suppliers could stabilise operations",
-        ])
-    elif risk == "MEDIUM":
-        suggestions.extend([
-            "Monitoring the widening gap between on-time and delayed payments could provide early warning of further stress",
-            "Exploring whether payment timing adjustments may help maintain supplier confidence",
-            "Regular review of payment spread trends could support proactive cash flow management",
-        ])
+    if is_bank:
+        if risk == "HIGH":
+            suggestions.extend([
+                "Schedule an urgent outreach call with the client's primary contact within 48 hours",
+                "Review the client's current credit facility and overdraft utilisation",
+                "Consider escalating to the Credit Committee if delays continue to accelerate",
+            ])
+        elif risk == "MEDIUM":
+            suggestions.extend([
+                "Schedule a proactive check-in call with the client this week",
+                "Offer NatWest cash flow management or invoice financing products",
+                "Set a 2-week monitoring alert to track whether delays continue drifting",
+            ])
+        else:
+            suggestions.extend([
+                "Continue standard periodic monitoring — no immediate action required",
+                "Note positive payment behaviour in the client's file",
+                "Consider this client for relationship development opportunities",
+            ])
     else:
-        suggestions.extend([
-            "Continuing current payment discipline may help maintain stable supplier relationships",
-            "Periodic review of payment patterns could help identify any emerging drift early",
-            "Maintaining visibility of supplier payment terms relative to actual timing could support ongoing health",
-        ])
+        if risk == "HIGH":
+            suggestions.extend([
+                "Consider speaking to your NatWest relationship manager about cash flow support options",
+                "Reaching out to your most-delayed suppliers early may help preserve those relationships",
+                "Reviewing your payment schedule to distribute payments more evenly could reduce pressure",
+            ])
+        elif risk == "MEDIUM":
+            suggestions.extend([
+                "Keeping an eye on the widening gap between on-time and delayed payments could give you early warning",
+                "Exploring whether small adjustments to payment timing could maintain supplier confidence",
+                "Regular review of payment trends could support proactive cash flow management",
+            ])
+        else:
+            suggestions.extend([
+                "Continuing your current payment discipline helps maintain strong supplier relationships",
+                "Periodic review of payment patterns can help catch any emerging drift early",
+                "Maintaining visibility of your payment terms vs actual timing supports ongoing financial health",
+            ])
 
     # Priority focus
     priority_focus: List[str] = []
     if metrics["critical_count"] > 0:
         critical_names = [s["name"] for s in suppliers if s["severity"] == "critical"]
-        priority_focus.append(f"Suppliers in critical delay: {', '.join(critical_names)}")
+        priority_focus.append(
+            f"Immediate outreach regarding: {', '.join(critical_names)}"
+            if is_bank else
+            f"Most overdue suppliers: {', '.join(critical_names)}"
+        )
     if metrics["triage_detected"]:
-        priority_focus.append("Closing the gap between fastest-paid and most-delayed suppliers")
-    if metrics["accelerating_count"] > 0:
-        priority_focus.append("Suppliers with accelerating delay trends")
+        priority_focus.append(
+            "Investigate the payment triage pattern — discuss cash flow position with client"
+            if is_bank else
+            "Closing the payment gap between your fastest and most-delayed suppliers"
+        )
+    if metrics["accelerating_count"] > 0 and not priority_focus:
+        priority_focus.append(
+            "Monitor accelerating delay trajectory — set escalation trigger"
+            if is_bank else
+            "Suppliers with worsening payment trends need attention first"
+        )
     if not priority_focus:
-        priority_focus.append("Routine monitoring — no urgent focus areas identified")
+        priority_focus.append(
+            "Routine monitoring — no urgent RM actions required"
+            if is_bank else
+            "Routine monitoring — no urgent focus areas identified"
+        )
 
     # Expected impact
-    if risk == "HIGH":
-        expected_impact = (
-            "Addressing the most delayed supplier relationships and reducing payment spread "
-            "could help move the risk profile from high toward medium over 4–8 weeks, "
-            "potentially preserving key supplier partnerships."
-        )
-    elif risk == "MEDIUM":
-        expected_impact = (
-            "Stabilising payment timing and preventing further drift could help maintain "
-            "the current risk level and reduce the chance of escalation to high risk."
-        )
+    if is_bank:
+        if risk == "HIGH":
+            expected_impact = (
+                "Early RM engagement at this stage can open a 4–8 week window to restructure "
+                "payment arrangements, reducing the likelihood of default and protecting "
+                "the bank's lending relationship."
+            )
+        elif risk == "MEDIUM":
+            expected_impact = (
+                "Proactive outreach now can prevent escalation to high risk. "
+                "Offering appropriate support products may stabilise the client's cash flow "
+                "before supplier relationships are damaged."
+            )
+        else:
+            expected_impact = (
+                "No intervention needed. Continued monitoring ensures any emerging "
+                "stress is caught early in future periods."
+            )
     else:
-        expected_impact = (
-            "Maintaining current payment behaviour supports a stable risk profile. "
-            "Continued consistency may reinforce supplier confidence over time."
-        )
+        if risk == "HIGH":
+            expected_impact = (
+                "Addressing your most delayed supplier relationships and spreading payments "
+                "more evenly could help improve your risk profile over 4–8 weeks and "
+                "preserve key supplier partnerships."
+            )
+        elif risk == "MEDIUM":
+            expected_impact = (
+                "Stabilising your payment timing now could prevent further drift and reduce "
+                "the chance of any supplier relationships becoming strained."
+            )
+        else:
+            expected_impact = (
+                "Maintaining your current payment behaviour supports a stable financial profile. "
+                "Continued consistency reinforces supplier confidence over time."
+            )
 
     return {
         "summary": summary,
@@ -362,37 +481,42 @@ def _generate_fallback(sme_id: str, sme: Dict[str, Any]) -> Dict[str, Any]:
 # Public API
 # ---------------------------------------------------------------------------
 
-async def get_sme_insights(sme_id: str, force_refresh: bool = False) -> Dict[str, Any]:
+async def get_sme_insights(sme_id: str, force_refresh: bool = False, viewer: str = "sme") -> Dict[str, Any]:
     """
     Get behavioural insights for one SME.
 
+    viewer='sme'  → business-facing guidance (for the SME owner)
+    viewer='bank' → RM-facing action recommendations (for the Bank RM)
+
     Tries Groq first; falls back to heuristic generation.
-    Results are cached in memory for the lifetime of the server process.
+    Results are cached per (sme_id, viewer) pair for the server lifetime.
     """
     if sme_id not in SME_DATABASE:
         return {"error": f"Unknown SME: {sme_id}"}
 
-    if not force_refresh and sme_id in _INSIGHTS_CACHE:
-        return _INSIGHTS_CACHE[sme_id]
+    cache_key = f"{sme_id}:{viewer}"
+    if not force_refresh and cache_key in _INSIGHTS_CACHE:
+        return _INSIGHTS_CACHE[cache_key]
 
     sme = SME_DATABASE[sme_id]
     user_prompt = _build_user_prompt(sme_id, sme)
 
-    # Try Groq
-    result = await _call_groq(user_prompt)
+    # Try Groq with the correct system prompt for this viewer
+    result = await _call_groq(user_prompt, viewer=viewer)
     source = "groq"
 
     # Fallback to heuristic
     if result is None:
-        result = _generate_fallback(sme_id, sme)
+        result = _generate_fallback(sme_id, sme, viewer=viewer)
         source = "heuristic"
 
     # Enrich with metadata
     result["sme_id"] = sme_id
     result["sme_name"] = sme["name"]
     result["source"] = source
+    result["viewer"] = viewer
 
-    _INSIGHTS_CACHE[sme_id] = result
+    _INSIGHTS_CACHE[cache_key] = result
     return result
 
 
