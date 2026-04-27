@@ -53,6 +53,26 @@ PROFILE_MIX = [
     ("seasonal", 0.03),
 ]
 
+COMPANY_NAMES = [
+    "Meridian Engineering Ltd", "Brightline Logistics Pvt Ltd", "Saffron Textiles Ltd",
+    "Northgate Manufacturing Ltd", "Crestwood Foods Pvt Ltd", "Ironbridge Steelworks Ltd",
+    "Kaveri Auto Components Ltd", "Silverpeak Hospitality Pvt Ltd", "Tanvir Pharma Ltd",
+    "Bluestone Construction Ltd", "Patel & Sons Wholesale Ltd", "Aurora Retail Pvt Ltd",
+    "Greenfield Agro Ltd", "Sundaram Plastics Pvt Ltd", "Vanguard Print Services Ltd",
+    "Hilltop Beverages Ltd", "Marigold Apparel Pvt Ltd", "Eastfield Transport Ltd",
+    "Rajesh Hardware Ltd", "Coral Bay Seafoods Pvt Ltd", "Kingfisher Packaging Ltd",
+    "Lotus Organics Pvt Ltd", "Westlake Furniture Ltd", "Pinnacle Electricals Ltd",
+    "Mehra Garments Pvt Ltd", "Ridgeline Cement Ltd", "Sapphire Catering Pvt Ltd",
+    "Trident Tools Ltd", "Banyan Tree Resorts Pvt Ltd", "Orion Chemicals Ltd",
+    "Daksh Auto Spares Ltd", "Highland Dairy Pvt Ltd", "Velocity Couriers Ltd",
+    "Mayfair Stationers Pvt Ltd", "Indus Valley Spices Ltd", "Grayson Builders Ltd",
+    "Nimbus Software Services Pvt Ltd", "Khanna Footwear Ltd", "Rosewood Interiors Pvt Ltd",
+    "Beacon Plastics Ltd", "Jaiswal Trading Co Ltd", "Sunrise Bakery Pvt Ltd",
+    "Zenith Industrial Supplies Ltd", "Verdant Landscapes Pvt Ltd", "Apex Fasteners Ltd",
+    "Mistry Marine Ltd", "Cobalt IT Solutions Pvt Ltd", "Heritage Mills Ltd",
+    "Glenmark Tools Pvt Ltd", "Wadia Wholesale Ltd",
+]
+
 SUPPLIER_CATEGORY_TERMS = {
     "materials": 21,
     "logistics": 30,
@@ -150,7 +170,7 @@ def generate_portfolio(
 
     for i in range(n_companies):
         cid = f"C{i + 1:04d}"
-        cname = f"SME-{i + 1:04d} Ltd"
+        cname = COMPANY_NAMES[i % len(COMPANY_NAMES)]
         sector = rng.choice(SECTORS)
         size = rng.choice(SIZE_BANDS, p=[0.55, 0.35, 0.10])
         profile = _pick_profile(rng)

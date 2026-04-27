@@ -525,7 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const session = Storage.getSession();
     if (session && session.email) {
         const profile = Storage.getProfile(session.email);
-        if (profile && profile.businessName) {
+        if (profile && (profile.businessName || profile.accountType === 'bank')) {
             enterApp(session.email);
         } else {
             showView('view-onboarding');
@@ -609,12 +609,22 @@ function handleSignup(e) {
     }
 
     errorEl.textContent = '';
+    const accountType = sessionStorage.getItem('pp_pending_account_type') === 'bank' ? 'bank' : 'sme';
     Storage.saveProfile(email, {
         passwordHash: simpleHash(password),
+        accountType,
         createdAt: Date.now(),
     });
     Storage.saveSession({ email, loggedInAt: Date.now() });
-    showView('view-onboarding');
+    sessionStorage.removeItem('pp_pending_account_type');
+
+    if (accountType === 'bank') {
+        // Bank RMs don't have a business — skip onboarding
+        Storage.saveProfile(email, { businessName: 'NatWest RM' });
+        enterApp(email);
+    } else {
+        showView('view-onboarding');
+    }
 }
 
 function simpleHash(str) {
@@ -675,6 +685,14 @@ function enterApp(email) {
     // Show loading
     document.getElementById('dashboard-loader').style.display = 'flex';
     document.getElementById('dashboard-content').style.display = 'none';
+
+    // Bank RMs land directly in Bank Risk view
+    if (profile.accountType === 'bank') {
+        loadDashboard();
+        renderProfile(email, profile);
+        switchToBankView();
+        return;
+    }
 
     loadDashboard();
     renderProfile(email, profile);
@@ -897,7 +915,20 @@ function setupAIExpander() {
     if (goDeeper) {
         goDeeper.addEventListener('click', () => {
             switchBankRiskSubTab('ai-details');
-            window.scrollTo(0, 0);
+            const deep = document.getElementById('ai-models-deep');
+            if (deep) {
+                deep.style.display = 'block';
+                loadAIStatus();
+                setTimeout(() => deep.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+            }
+        });
+    }
+
+    const hideDeep = document.getElementById('ai-models-deep-hide');
+    if (hideDeep) {
+        hideDeep.addEventListener('click', () => {
+            const deep = document.getElementById('ai-models-deep');
+            if (deep) deep.style.display = 'none';
         });
     }
 }
@@ -906,7 +937,26 @@ function setupAIExpander() {
 //  VIEW TOGGLE (SME / Bank Risk)
 // ══════════════════════════════════════
 
+// In SME view, an SME owner should only see their own business — hide
+// bank-portfolio-only nav items (Bank Risk, Risk Spread, AI Models, Simulator).
+function applyNavVisibilityForMode(mode) {
+    const bankOnlySelectors = [
+        '.nav-btn[data-page="bankrisk"]',
+        '.nav-btn[data-page="contagion"]',
+        '.more-dropdown-item[data-morepage="bankrisk"]',
+        '.more-dropdown-item[data-morepage="contagion"]',
+        '.nav-btn[data-page="simulator"]',
+    ];
+    const display = mode === 'bank' ? '' : 'none';
+    bankOnlySelectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => { el.style.display = display; });
+    });
+}
+
 function setupViewToggle() {
+    // Apply nav visibility for the initial mode on load
+    applyNavVisibilityForMode(currentViewMode);
+
     const toggleContainer = document.getElementById('view-toggle');
     if (!toggleContainer) return;
 
@@ -916,6 +966,12 @@ function setupViewToggle() {
             if (mode === currentViewMode) return;
 
             currentViewMode = mode;
+
+            // Toggling = SME owner self-view → SME-facing insights.
+            // (Drilldown from Bank Risk uses switchToSMEView which sets 'bank'.)
+            if (mode === 'sme') {
+                insightsViewerContext = 'sme';
+            }
 
             // Update toggle button states
             toggleContainer.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
@@ -946,9 +1002,8 @@ function setupViewToggle() {
             const welcomeBar = document.getElementById('welcome-bar');
             if (welcomeBar) welcomeBar.style.display = mode === 'bank' ? 'none' : 'flex';
 
-            // Hide Simulator nav in Bank mode (it's SME-only)
-            const simNav = document.querySelector('.nav-btn[data-page="simulator"]');
-            if (simNav) simNav.style.display = mode === 'bank' ? 'none' : '';
+            // Apply nav visibility (SME owner sees only My Data + How It Works)
+            applyNavVisibilityForMode(mode);
 
             // If in bank mode, force dashboard page
             if (mode === 'bank') {
@@ -968,6 +1023,9 @@ function setupViewToggle() {
                 smeView.style.display = 'block';
                 smeView.style.animation = 'fadeIn 0.3s ease';
                 bankView.style.display = 'none';
+                // Re-load insights so the panel reflects the current viewer context
+                const savedSME = localStorage.getItem('selectedSME') || 'meridian';
+                loadBehaviourInsights(savedSME);
             }
         });
     });
@@ -1036,11 +1094,13 @@ function setupLandingListeners() {
 
     if (enterSme) {
         enterSme.addEventListener('click', () => {
+            sessionStorage.setItem('pp_pending_account_type', 'sme');
             showView('view-login');
         });
     }
     if (enterBank) {
         enterBank.addEventListener('click', () => {
+            sessionStorage.setItem('pp_pending_account_type', 'bank');
             showView('view-login');
         });
     }
@@ -1624,9 +1684,8 @@ function switchToSMEView(smeId) {
     // Show welcome bar
     const welcomeBar = document.getElementById('welcome-bar');
     if (welcomeBar) welcomeBar.style.display = 'flex';
-    // Restore Simulator nav
-    const simNav = document.querySelector('.nav-btn[data-page="simulator"]');
-    if (simNav) simNav.style.display = '';
+    // Drilldown from Bank Risk — keep full bank nav so RM can navigate back.
+    applyNavVisibilityForMode('bank');
     // Switch content
     document.getElementById('sme-view').style.display = 'block';
     document.getElementById('bank-risk-view').style.display = 'none';
@@ -1667,9 +1726,8 @@ function switchToBankView() {
     // Hide welcome bar
     const welcomeBar = document.getElementById('welcome-bar');
     if (welcomeBar) welcomeBar.style.display = 'none';
-    // Hide Simulator nav
-    const simNav = document.querySelector('.nav-btn[data-page="simulator"]');
-    if (simNav) simNav.style.display = 'none';
+    // Restore full bank-mode nav
+    applyNavVisibilityForMode('bank');
     // Force dashboard page
     showPage('dashboard');
     // Switch content
@@ -1822,30 +1880,38 @@ function renderRMActions(businesses) {
             const worstSupplier = sme.suppliers.suppliers
                 .sort((a, c) => c.current_delay - a.current_delay)[0];
             actions.push({
+                smeId: b.id,
+                smeName: b.name,
                 urgency: 'urgent',
                 icon: '🚨',
                 title: `Escalate: ${b.name}`,
-                desc: `<strong>${worstSupplier.supplier_name}</strong> is ${Math.round(worstSupplier.current_delay)}d late (terms: ${worstSupplier.contractual_terms}d). Schedule an emergency review call and consider offering a short-term working capital facility to prevent default.`,
+                desc: `${worstSupplier.supplier_name} is ${Math.round(worstSupplier.current_delay)}d late (terms: ${worstSupplier.contractual_terms}d). Schedule an emergency review call and consider offering a short-term working capital facility to prevent default.`,
                 tag: 'Immediate Action Required',
+                sendable: true,
             });
         } else if (b.risk === 'AMBER') {
             actions.push({
+                smeId: b.id,
+                smeName: b.name,
                 urgency: 'moderate',
                 icon: '⚠️',
                 title: `Schedule Review: ${b.name}`,
                 desc: `Early stress signals detected — payment triage behaviour emerging. Proactively reach out to discuss cash flow challenges and explore restructuring options before the situation escalates.`,
                 tag: 'Review Within 5 Days',
+                sendable: true,
             });
         } else {
             actions.push({
+                smeId: b.id,
+                smeName: b.name,
                 urgency: 'routine',
                 icon: '✅',
                 title: `Monitor: ${b.name}`,
                 desc: `Payment patterns healthy across all suppliers. Continue standard quarterly review cycle. No intervention needed.`,
                 tag: 'Routine Monitoring',
+                sendable: false,
             });
         }
-
     });
 
     // Sort: urgent first
@@ -1853,15 +1919,91 @@ function renderRMActions(businesses) {
     actions.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
 
     list.innerHTML = actions.map(a => `
-        <div class="rm-action-card">
+        <div class="rm-action-card" data-sme="${escapeHtml(a.smeId)}">
             <div class="rm-action-urgency ${escapeHtml(a.urgency)}">${escapeHtml(a.icon)}</div>
             <div class="rm-action-body">
                 <div class="rm-action-title">${escapeHtml(a.title)}</div>
                 <div class="rm-action-desc">${escapeHtml(a.desc)}</div>
-                <span class="rm-action-tag ${escapeHtml(a.urgency)}">${escapeHtml(a.tag)}</span>
+                <div class="rm-action-ai" data-ai-slot="${escapeHtml(a.smeId)}" style="display:none;margin-top:8px;padding:8px 10px;border-left:2px solid #7c3aed;background:rgba(124,58,237,0.06);font-size:0.85rem;line-height:1.4;color:var(--text-secondary);"></div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+                    <span class="rm-action-tag ${escapeHtml(a.urgency)}">${escapeHtml(a.tag)}</span>
+                    ${a.sendable ? `<button class="rm-send-btn" data-sme="${escapeHtml(a.smeId)}" data-title="${escapeHtml(a.title)}" data-message="${escapeHtml(a.desc)}" data-urgency="${escapeHtml(a.urgency)}" style="padding:6px 12px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;">Send to ${escapeHtml(a.smeName)}</button>` : ''}
+                    <span class="rm-send-status" data-status-for="${escapeHtml(a.smeId)}" style="font-size:0.78rem;color:var(--text-muted);"></span>
+                </div>
             </div>
         </div>
     `).join('');
+
+    // Wire up Send buttons
+    list.querySelectorAll('.rm-send-btn').forEach(btn => {
+        btn.addEventListener('click', () => sendRMSupport(btn));
+    });
+
+    // Enrich cards with Groq RM-facing insight (parallel, non-blocking)
+    actions.forEach(a => enrichRMActionWithGroq(a.smeId));
+}
+
+async function enrichRMActionWithGroq(smeId) {
+    const slot = document.querySelector(`[data-ai-slot="${smeId}"]`);
+    if (!slot) return;
+    try {
+        const resp = await fetch(`${API_BASE}/api/insights/${smeId}?viewer=bank`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const summary = data.summary || '';
+        const firstSuggestion = (data.suggestions && data.suggestions[0]) || '';
+        if (!summary && !firstSuggestion) return;
+        const sourceTag = data.source === 'groq' ? 'Groq AI' : 'AI';
+        slot.innerHTML = `
+            <div style="font-weight:600;color:#a78bfa;font-size:0.72rem;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px;">${sourceTag} · RM Insight</div>
+            <div>${escapeHtml(summary)}</div>
+            ${firstSuggestion ? `<div style="margin-top:4px;color:var(--text-primary);"><strong>Next step:</strong> ${escapeHtml(firstSuggestion)}</div>` : ''}
+        `;
+        slot.style.display = 'block';
+    } catch (err) {
+        // Silent fail — keep heuristic card as-is
+    }
+}
+
+async function sendRMSupport(btn) {
+    const smeId = btn.dataset.sme;
+    const title = btn.dataset.title;
+    const message = btn.dataset.message;
+    const urgency = btn.dataset.urgency || 'moderate';
+    const status = document.querySelector(`[data-status-for="${smeId}"]`);
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/support/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sme_id: smeId, title, message, urgency }),
+        });
+        if (!resp.ok) throw new Error(resp.status);
+        const record = await resp.json();
+
+        // Cross-tab broadcast for instant SME-side update
+        try {
+            localStorage.setItem(`pp_rm_msg_${smeId}`, JSON.stringify(record));
+        } catch (_) { /* ignore quota */ }
+
+        btn.textContent = 'Sent ✓';
+        btn.style.background = '#10b981';
+        btn.style.borderColor = '#10b981';
+        if (status) {
+            status.textContent = `Delivered to ${smeId} · ${new Date(record.sent_at).toLocaleTimeString()}`;
+            status.style.color = '#10b981';
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Retry';
+        if (status) {
+            status.textContent = `Failed: ${err.message}`;
+            status.style.color = '#ef4444';
+        }
+    }
 }
 
 function renderEarlyWarningSignals(signals) {
@@ -3084,7 +3226,81 @@ function renderOutreach() {
     const expandBtn = document.getElementById('outreach-expand-btn');
     fullEl.style.display = 'none';
     expandBtn.textContent = 'Generate Full Message';
+
+    // Overlay any RM-pushed support message above the heuristic content
+    refreshRMMessageBanner();
 }
+
+/**
+ * Fetch any RM-pushed support message for the current SME and render a
+ * highlighted banner inside the outreach section. Re-rendered on poll + storage events.
+ */
+async function refreshRMMessageBanner() {
+    const section = document.getElementById('outreach-section');
+    if (!section || section.style.display === 'none') return;
+    const smeId = (typeof selectedSME !== 'undefined' && selectedSME)
+        || localStorage.getItem('selectedSME')
+        || 'meridian';
+
+    let record = null;
+    try {
+        const resp = await fetch(`${API_BASE}/api/support/message/${smeId}`);
+        if (resp.ok) record = await resp.json();
+    } catch (_) { /* fall back to localStorage */ }
+
+    if (!record) {
+        try {
+            const cached = localStorage.getItem(`pp_rm_msg_${smeId}`);
+            if (cached) record = JSON.parse(cached);
+        } catch (_) { /* ignore */ }
+    }
+
+    let banner = document.getElementById('rm-message-banner');
+    if (!record) {
+        if (banner) banner.remove();
+        return;
+    }
+
+    const sentAt = record.sent_at ? new Date(record.sent_at).toLocaleString() : '';
+    const html = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;background:#7c3aed;color:#fff;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">📬 From your NatWest RM</span>
+            <span style="font-size:0.75rem;color:var(--text-muted);">${escapeHtml(sentAt)}</span>
+        </div>
+        <div style="font-weight:600;font-size:0.95rem;color:var(--text-primary);margin-bottom:4px;">${escapeHtml(record.title || 'Message from your NatWest RM')}</div>
+        <div style="font-size:0.88rem;line-height:1.55;color:var(--text-secondary);">${escapeHtml(record.message || '')}</div>
+    `;
+
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'rm-message-banner';
+        banner.style.cssText = 'margin:12px 0 16px;padding:14px 16px;border:1px solid #7c3aed;border-radius:10px;background:linear-gradient(180deg,rgba(124,58,237,0.10),rgba(124,58,237,0.03));';
+        // Insert at the top of the outreach section, after its header
+        const insertAfter = document.getElementById('outreach-subtitle')
+            || section.firstElementChild;
+        if (insertAfter && insertAfter.parentNode) {
+            insertAfter.parentNode.insertBefore(banner, insertAfter.nextSibling);
+        } else {
+            section.prepend(banner);
+        }
+    }
+    banner.innerHTML = html;
+}
+
+// Poll for RM messages every 15s while the SME view is visible
+setInterval(() => {
+    const smeView = document.getElementById('sme-view');
+    if (smeView && smeView.style.display !== 'none') {
+        refreshRMMessageBanner();
+    }
+}, 15000);
+
+// Cross-tab instant updates (RM tab pushes → SME tab refreshes immediately)
+window.addEventListener('storage', (e) => {
+    if (e.key && e.key.startsWith('pp_rm_msg_')) {
+        refreshRMMessageBanner();
+    }
+});
 
 function setupOutreachListeners() {
     const expandBtn = document.getElementById('outreach-expand-btn');
@@ -3934,13 +4150,11 @@ let aiForecastChart = null;
 let aiAnomalyChart = null;
 
 function setupAIPage() {
+    // Bind the Simulate Next Week button (only feature kept on this subtab)
+    setupAISimulation();
+
     const runBtn = document.getElementById('run-ai-btn');
-    if (!runBtn) return;
-
-    runBtn.addEventListener('click', runAIAnalysis);
-
-    // Load AI status on first visit
-    loadAIStatus();
+    if (runBtn) runBtn.addEventListener('click', runAIAnalysis);
 }
 
 async function loadAIStatus() {
@@ -4435,7 +4649,7 @@ function renderSimulationResults(data, container) {
             <div class="ai-live-card">
                 <div class="live-name">${r.supplier_name || r.supplier_id}</div>
                 <div class="live-delay" style="color:${color}">${r.payment_delay_days}d</div>
-                <span class="live-status" style="background:${color}20;color:${color}">${r.payment_status || 'unknown'}</span>
+                <span class="live-status" style="background:${color}20;color:${color}">${(r.payment_status || 'unknown').replace(/_/g, ' ').toUpperCase()}</span>
             </div>`;
     }).join('');
 }
@@ -5404,10 +5618,22 @@ let _cgGraph = null;
 let _cgLayout = null;
 
 /**
- * Format a number in Indian Rupee format (₹1,23,456)
+ * Format a number in compact Indian Rupee format.
+ * ≥ 1 Cr  →  ₹4.3 Cr
+ * ≥ 1 L   →  ₹3.2 L
+ * < 1 L   →  ₹12,345
  */
 function formatINR(amount) {
     if (amount == null || isNaN(amount)) return '—';
+    const abs = Math.abs(amount);
+    if (abs >= 1e7) {
+        const cr = amount / 1e7;
+        return '₹' + (cr >= 100 ? cr.toFixed(0) : cr.toFixed(1)) + ' Cr';
+    }
+    if (abs >= 1e5) {
+        const lakh = amount / 1e5;
+        return '₹' + (lakh >= 100 ? lakh.toFixed(0) : lakh.toFixed(1)) + ' L';
+    }
     return '₹' + Math.round(amount).toLocaleString('en-IN');
 }
 

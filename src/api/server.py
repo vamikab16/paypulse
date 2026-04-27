@@ -831,6 +831,55 @@ async def get_insights(sme_id: str, viewer: str = "sme"):
     return sanitize_for_json(result)
 
 
+# ---------------------------------------------------------------------------
+# RM → SME Support Message Relay (in-memory; per server lifetime)
+# ---------------------------------------------------------------------------
+
+from datetime import datetime as _support_dt
+
+_RM_MESSAGES: Dict[str, Dict[str, Any]] = {}
+
+
+class RMSupportMessage(BaseModel):
+    sme_id: str
+    title: Optional[str] = None
+    message: str
+    urgency: Optional[str] = "moderate"
+    rm_name: Optional[str] = "NatWest Relationship Manager"
+
+
+@app.post("/api/support/message")
+async def post_support_message(body: RMSupportMessage):
+    """Store an RM-authored support message for an SME. Overwrites any prior message."""
+    if body.sme_id not in SME_DATABASE:
+        return JSONResponse(status_code=404, content={"error": f"Unknown SME: {body.sme_id}"})
+    record = {
+        "sme_id": body.sme_id,
+        "title": (body.title or "Message from your NatWest RM").strip(),
+        "message": body.message.strip(),
+        "urgency": (body.urgency or "moderate"),
+        "rm_name": body.rm_name,
+        "sent_at": _support_dt.utcnow().isoformat() + "Z",
+    }
+    _RM_MESSAGES[body.sme_id] = record
+    return record
+
+
+@app.get("/api/support/message/{sme_id}")
+async def get_support_message(sme_id: str):
+    """Return the latest RM message for this SME, or 404 if none."""
+    msg = _RM_MESSAGES.get(sme_id)
+    if not msg:
+        return JSONResponse(status_code=404, content={"error": "no_message"})
+    return msg
+
+
+@app.delete("/api/support/message/{sme_id}")
+async def delete_support_message(sme_id: str):
+    _RM_MESSAGES.pop(sme_id, None)
+    return {"ok": True}
+
+
 @app.post("/api/custom/analyze")
 async def post_custom_analyze(body: CustomAnalyzeRequest):
     """

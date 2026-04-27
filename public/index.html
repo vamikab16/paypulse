@@ -311,7 +311,7 @@
                         <div class="more-dropdown" id="more-dropdown">
                             <button class="more-dropdown-item" data-morepage="bankrisk" data-subtab="ai-details">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
-                                AI Models
+                                Simulate Next Week
                             </button>
                             <button class="more-dropdown-item" data-morepage="contagion" data-action="open-simulator">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M9 3h6v6l3 8H6l3-8V3z"/><path d="M8 20h8"/></svg>
@@ -705,7 +705,7 @@
                 <!-- Sub-tab bar -->
                 <div class="subtab-bar" id="bankrisk-subtabs">
                     <button class="subtab-btn active" data-subtab="overview">Overview</button>
-                    <button class="subtab-btn" data-subtab="ai-details">AI Details</button>
+                    <button class="subtab-btn" data-subtab="ai-details">Simulate Next Week</button>
                     <div class="subtab-slider"></div>
                 </div>
 
@@ -793,176 +793,175 @@
                     </section>
                 </div>
 
-                <!-- ═══ SUB-TAB: AI Details ═══ -->
+                <!-- ═══ SUB-TAB: Simulate Next Week ═══ -->
                 <div class="subtab-content" id="subtab-ai-details">
-
-                <!-- AI Model Status -->
-                <section class="ai-status-section" id="ai-status-section">
-                    <div class="ai-status-cards">
-                        <div class="ai-model-card">
-                            <div class="ai-model-icon forecaster-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                            </div>
-                            <h3>Forecaster</h3>
-                            <span class="ai-model-type">GradientBoosting</span>
-                            <div class="ai-model-metrics-container">
-                                <div class="ai-model-metric">
-                                    <span class="ai-metric-label">Training MAE</span>
-                                    <span class="ai-metric-value" id="ai-forecaster-mae">—</span>
-                                </div>
-                            </div>
-                            <div class="ai-model-footer"></div>
-                        </div>
-                        <div class="ai-model-card">
-                            <div class="ai-model-icon classifier-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                            </div>
-                            <h3>Risk Classifier</h3>
-                            <span class="ai-model-type">RandomForest</span>
-                            <div class="ai-model-metrics-container">
-                                <div class="ai-model-metric">
-                                    <span class="ai-metric-label">AUC (out-of-time)</span>
-                                    <span class="ai-metric-value" id="ai-classifier-auc">—</span>
-                                </div>
-                            </div>
-                            <div class="ai-model-footer"></div>
-                        </div>
-                        <div class="ai-model-card">
-                            <div class="ai-model-icon anomaly-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                            </div>
-                            <h3>Anomaly Detector</h3>
-                            <span class="ai-model-type">IsolationForest</span>
-                            <div class="ai-model-metrics-container">
-                                <div class="ai-model-metric">
-                                    <span class="ai-metric-label">Status</span>
-                                    <span class="ai-metric-value" id="ai-anomaly-status">—</span>
-                                </div>
-                            </div>
-                            <div class="ai-model-footer"></div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- AI Supplier Selector -->
-                <section class="ai-selector-section">
-                    <label class="sim-label">Select Supplier for AI Analysis</label>
-                    <div class="ai-selector-row">
-                        <select class="sim-select" id="ai-supplier-select">
-                            <option value="S1">AlphaSteel Corp</option>
-                            <option value="S2" selected>BetaLogistics Ltd</option>
-                            <option value="S3">GammaSupplies Co</option>
-                            <option value="S4">DeltaParts Inc</option>
-                            <option value="S5">EpsilonServices</option>
-                        </select>
-                        <button class="btn btn-primary" id="run-ai-btn">Run AI Analysis</button>
-                    </div>
-                </section>
-
-                <!-- AI Results -->
-                <div id="ai-results" style="display:none;">
-
-                    <!-- AI Summary -->
-                    <section class="ai-summary-section">
-                        <div class="ai-summary-card" id="ai-summary-card">
-                            <div class="ai-summary-header">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
-                                <h3>AI Intelligence Summary</h3>
-                            </div>
-                            <p class="ai-summary-text" id="ai-summary-text"></p>
-                        </div>
-                    </section>
-
-                    <!-- Risk Classification -->
-                    <section class="ai-risk-section">
-                        <h2 class="section-label">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                            ML Risk Classification
-                        </h2>
-                        <div class="ai-risk-result">
-                            <div class="ai-risk-main">
-                                <span class="ai-risk-badge" id="ai-risk-badge">—</span>
-                                <div class="ai-risk-confidence">
-                                    <span class="ai-confidence-label">Confidence</span>
-                                    <span class="ai-confidence-value" id="ai-risk-confidence">—</span>
-                                </div>
-                            </div>
-                            <div class="ai-risk-probs" id="ai-risk-probs"></div>
-                        </div>
-                    </section>
-
-                    <!-- ML Forecast -->
-                    <section class="ai-forecast-section">
-                        <h2 class="section-label">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                            ML Forecast (Gradient Boosting)
-                        </h2>
-                        <div class="chart-wrap">
-                            <canvas id="ai-forecast-chart"></canvas>
-                        </div>
-                        <div class="ai-forecast-meta" id="ai-forecast-meta"></div>
-                    </section>
-
-                    <!-- Anomaly Detection -->
-                    <section class="ai-anomaly-section">
-                        <h2 class="section-label">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                            Anomaly Detection (Isolation Forest)
-                        </h2>
-                        <div class="ai-anomaly-summary" id="ai-anomaly-summary"></div>
-                        <div class="chart-wrap">
-                            <canvas id="ai-anomaly-chart"></canvas>
-                        </div>
-                    </section>
-
-
-
-                    <!-- Neural Network Forecast -->
-                    <section class="ai-neural-section">
-                        <h2 class="section-label">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>
-                            GRU Neural Network Forecast
-                        </h2>
-                        <div class="chart-wrap">
-                            <canvas id="ai-neural-chart"></canvas>
-                        </div>
-                    </section>
-
-                    <!-- Model Comparison -->
-                    <section class="ai-compare-section">
-                        <h2 class="section-label">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-                            Model Comparison (Head-to-Head)
-                        </h2>
-                        <div class="ai-compare-chart-wrap">
-                            <canvas id="ai-compare-chart"></canvas>
-                        </div>
-                        <div class="ai-compare-meta" id="ai-compare-meta"></div>
-                    </section>
-
-                    <!-- Supplier Clustering -->
-                    <section class="ai-cluster-section">
-                        <h2 class="section-label">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="2"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-                            K-Means Supplier Clustering
-                        </h2>
-                        <div class="ai-cluster-cards" id="ai-cluster-cards"></div>
-                    </section>
-
-                    <!-- Live Simulation -->
                     <section class="ai-live-section">
                         <h2 class="section-label">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            Live Data Simulation
+                            Simulate Next Week
                         </h2>
+                        <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 16px;">Project supplier payment behaviour one week forward to see where stress is heading. Click again to advance further into the future.</p>
                         <div class="ai-live-controls">
                             <button class="btn btn-primary btn-sm" id="ai-simulate-btn">Simulate Next Week</button>
                             <span class="ai-live-status" id="ai-live-status"></span>
                         </div>
                         <div class="ai-live-results" id="ai-live-results"></div>
                     </section>
-                </div>
 
+                    <!-- Hidden until "Go deeper" is clicked from the Overview subtab -->
+                    <div id="ai-models-deep" style="display:none;margin-top:32px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                            <div>
+                                <h2 style="margin:0;font-size:1.15rem;color:var(--text-primary);">AI Models — Live</h2>
+                                <p style="margin:4px 0 0;color:var(--text-muted);font-size:0.85rem;">Per-supplier ML breakdown: classifier, forecaster, anomaly, neural net, clustering.</p>
+                            </div>
+                            <button class="btn btn-ghost btn-sm" id="ai-models-deep-hide" style="padding:6px 14px;">Hide</button>
+                        </div>
+
+                        <!-- AI Model Status -->
+                        <section class="ai-status-section" id="ai-status-section">
+                            <div class="ai-status-cards">
+                                <div class="ai-model-card">
+                                    <div class="ai-model-icon forecaster-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                    </div>
+                                    <h3>Forecaster</h3>
+                                    <span class="ai-model-type">GradientBoosting</span>
+                                    <div class="ai-model-metrics-container">
+                                        <div class="ai-model-metric">
+                                            <span class="ai-metric-label">Training MAE</span>
+                                            <span class="ai-metric-value" id="ai-forecaster-mae">—</span>
+                                        </div>
+                                    </div>
+                                    <div class="ai-model-footer"></div>
+                                </div>
+                                <div class="ai-model-card">
+                                    <div class="ai-model-icon classifier-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    </div>
+                                    <h3>Risk Classifier</h3>
+                                    <span class="ai-model-type">RandomForest</span>
+                                    <div class="ai-model-metrics-container">
+                                        <div class="ai-model-metric">
+                                            <span class="ai-metric-label">AUC (out-of-time)</span>
+                                            <span class="ai-metric-value" id="ai-classifier-auc">—</span>
+                                        </div>
+                                    </div>
+                                    <div class="ai-model-footer"></div>
+                                </div>
+                                <div class="ai-model-card">
+                                    <div class="ai-model-icon anomaly-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    </div>
+                                    <h3>Anomaly Detector</h3>
+                                    <span class="ai-model-type">IsolationForest</span>
+                                    <div class="ai-model-metrics-container">
+                                        <div class="ai-model-metric">
+                                            <span class="ai-metric-label">Status</span>
+                                            <span class="ai-metric-value" id="ai-anomaly-status">—</span>
+                                        </div>
+                                    </div>
+                                    <div class="ai-model-footer"></div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- AI Supplier Selector -->
+                        <section class="ai-selector-section">
+                            <label class="sim-label">Select Supplier for AI Analysis</label>
+                            <div class="ai-selector-row">
+                                <select class="sim-select" id="ai-supplier-select">
+                                    <option value="S1">AlphaSteel Corp</option>
+                                    <option value="S2" selected>BetaLogistics Ltd</option>
+                                    <option value="S3">GammaSupplies Co</option>
+                                    <option value="S4">DeltaParts Inc</option>
+                                    <option value="S5">EpsilonServices</option>
+                                </select>
+                                <button class="btn btn-primary" id="run-ai-btn">Run AI Analysis</button>
+                            </div>
+                        </section>
+
+                        <!-- AI Results -->
+                        <div id="ai-results" style="display:none;">
+                            <section class="ai-summary-section">
+                                <div class="ai-summary-card" id="ai-summary-card">
+                                    <div class="ai-summary-header">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 2a4 4 0 014 4v1a2 2 0 012 2v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9a2 2 0 012-2V6a4 4 0 014-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+                                        <h3>AI Intelligence Summary</h3>
+                                    </div>
+                                    <p class="ai-summary-text" id="ai-summary-text"></p>
+                                </div>
+                            </section>
+
+                            <section class="ai-risk-section">
+                                <h2 class="section-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    ML Risk Classification
+                                </h2>
+                                <div class="ai-risk-result">
+                                    <div class="ai-risk-main">
+                                        <span class="ai-risk-badge" id="ai-risk-badge">—</span>
+                                        <div class="ai-risk-confidence">
+                                            <span class="ai-confidence-label">Confidence</span>
+                                            <span class="ai-confidence-value" id="ai-risk-confidence">—</span>
+                                        </div>
+                                    </div>
+                                    <div class="ai-risk-probs" id="ai-risk-probs"></div>
+                                </div>
+                            </section>
+
+                            <section class="ai-forecast-section">
+                                <h2 class="section-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                    ML Forecast (Gradient Boosting)
+                                </h2>
+                                <div class="chart-wrap">
+                                    <canvas id="ai-forecast-chart"></canvas>
+                                </div>
+                                <div class="ai-forecast-meta" id="ai-forecast-meta"></div>
+                            </section>
+
+                            <section class="ai-anomaly-section">
+                                <h2 class="section-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    Anomaly Detection (Isolation Forest)
+                                </h2>
+                                <div class="ai-anomaly-summary" id="ai-anomaly-summary"></div>
+                                <div class="chart-wrap">
+                                    <canvas id="ai-anomaly-chart"></canvas>
+                                </div>
+                            </section>
+
+                            <section class="ai-neural-section">
+                                <h2 class="section-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>
+                                    GRU Neural Network Forecast
+                                </h2>
+                                <div class="chart-wrap">
+                                    <canvas id="ai-neural-chart"></canvas>
+                                </div>
+                            </section>
+
+                            <section class="ai-compare-section">
+                                <h2 class="section-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                                    Model Comparison (Head-to-Head)
+                                </h2>
+                                <div class="ai-compare-chart-wrap">
+                                    <canvas id="ai-compare-chart"></canvas>
+                                </div>
+                                <div class="ai-compare-meta" id="ai-compare-meta"></div>
+                            </section>
+
+                            <section class="ai-cluster-section">
+                                <h2 class="section-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="2"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+                                    K-Means Supplier Clustering
+                                </h2>
+                                <div class="ai-cluster-cards" id="ai-cluster-cards"></div>
+                            </section>
+                        </div>
+                    </div>
                 </div>
             </main>
 
