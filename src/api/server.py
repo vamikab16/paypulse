@@ -27,7 +27,7 @@ import os
 from typing import Any, Dict, List, Literal, Optional
 
 import pandas as pd
-from fastapi import FastAPI, Query, Header, HTTPException, Request
+from fastapi import FastAPI, Query, Header, HTTPException, Request, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +57,7 @@ from src.models.bank_grade import run_bank_grade_benchmark, get_cached_benchmark
 from src.data.portfolio import generate_portfolio
 from src.api.audit import log_inference, recent_audit_records
 from src.api.insights import get_sme_insights, get_all_insights, SME_DATABASE
+from src.api.pdf_parser import parse_supplier_pdf
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +624,43 @@ def _ensure_contagion_graph():
                 )
         graph["edges"].extend(new_edges)
 
+        # Attach per-borrower current state so the frontend's "Try a scenario"
+        # simulator can show numbers that actually differ between SMEs. Without
+        # this, the simulator falls back to the globally-loaded Meridian state
+        # and shows the same RED→GREEN, 36d→20d for every SME pick.
+        try:
+            firm_profile = dict(zip(firms["company_id"], firms["latent_profile"]))
+        except Exception:
+            firm_profile = {}
+
+        # Per-firm: avg payment delay over the last 8 weeks, max contractual terms.
+        last_window = payments[payments["week_number"] >= payments["week_number"].max() - 7]
+        per_firm = last_window.groupby("company_id").agg(
+            avg_delay=("payment_delay_days", "mean"),
+            max_terms=("contractual_terms_days", "max"),
+            n_suppliers=("supplier_id", "nunique"),
+        ).to_dict("index")
+
+        for node in graph["nodes"]:
+            if node.get("kind") != "bank_borrower":
+                continue
+            stats = per_firm.get(node["id"], {})
+            avg_delay = float(stats.get("avg_delay") or 0.0)
+            terms = float(stats.get("max_terms") or 30.0)
+            n_supp = int(stats.get("n_suppliers") or 0)
+            excess = avg_delay - terms
+            if excess <= 0:
+                risk = "GREEN"
+            elif excess <= 10:
+                risk = "AMBER"
+            else:
+                risk = "RED"
+            node["current_avg_delay"] = round(avg_delay, 1)
+            node["contractual_terms"] = round(terms, 0)
+            node["current_risk"] = risk
+            node["latent_profile"] = firm_profile.get(node["id"], "healthy")
+            node["n_suppliers"] = n_supp
+
         _CONTAGION_CACHE["graph"] = graph
         _CONTAGION_CACHE["firms"] = firms
     return _CONTAGION_CACHE["graph"]
@@ -985,6 +1023,79 @@ async def post_custom_analyze(body: CustomAnalyzeRequest):
             "supplier_count": custom_df["supplier_id"].nunique(),
             "total_records": len(custom_df),
         })
+
+
+# ---------------------------------------------------------------------------
+# PDF supplier-report scanner
+# ---------------------------------------------------------------------------
+
+# Cap to prevent abusive uploads. Real supplier ageing PDFs are rarely > 5MB.
+_MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@app.post("/api/parse-pdf")
+async def post_parse_pdf(file: UploadFile = File(...)):
+    """
+    Parse a supplier-payment / AR-ageing PDF and return structured rows the
+    "My Data" UI can drop straight into its localStorage state.
+
+    Response shape:
+        {
+          "suppliers":  [{supplier_id, supplier_name, contractual_terms, avg_invoice}, ...],
+          "payments":   [{supplier_id, supplier_name, week, delay, invoice}, ...],
+          "diagnostics": {strategy, rows_seen, rows_kept, warnings: [str, ...]}
+        }
+
+    The endpoint always returns 200 with a structured payload — even when
+    parsing finds nothing — so the frontend can show a friendly fallback
+    instead of a generic HTTP error.
+    """
+    # Defensive content-type check. Some browsers send application/octet-stream
+    # for drag-dropped files, so we also fall back to the filename extension.
+    ctype = (file.content_type or "").lower()
+    fname = (file.filename or "").lower()
+    if not (ctype == "application/pdf" or fname.endswith(".pdf")):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "expected_pdf",
+                     "message": "Please upload a PDF file."},
+        )
+
+    raw = await file.read()
+    if not raw:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "empty_file", "message": "The uploaded file is empty."},
+        )
+    if len(raw) > _MAX_PDF_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"error": "file_too_large",
+                     "message": f"PDF exceeds {_MAX_PDF_BYTES // (1024 * 1024)} MB cap."},
+        )
+
+    try:
+        result = parse_supplier_pdf(raw)
+    except Exception:
+        logger.exception("PDF parsing crashed")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "parse_failed",
+                     "message": "PDF parser encountered an unexpected error."},
+        )
+
+    log_inference(
+        endpoint="/api/parse-pdf",
+        model_id="paypulse-pdf-parser-v1",
+        subject_id=fname or "uploaded.pdf",
+        features={"size_bytes": len(raw), "filename": fname},
+        output={
+            "strategy": result["diagnostics"]["strategy"],
+            "suppliers": len(result["suppliers"]),
+            "payments": len(result["payments"]),
+        },
+    )
+    return sanitize_for_json(result)
 
 
 # ---------------------------------------------------------------------------

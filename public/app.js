@@ -664,7 +664,11 @@ function setupOnboardingListeners() {
         const supplierCount = document.getElementById('ob-suppliers').value;
 
         Storage.saveProfile(session.email, { businessName, industry, supplierCount });
+        // First-time SME setup: route to My Data page to gather suppliers + payments,
+        // then build a custom dashboard from those inputs.
+        sessionStorage.setItem('pp_pending_new_sme_setup', '1');
         enterApp(session.email);
+        showPage('mydata');
     });
 }
 
@@ -696,6 +700,18 @@ function enterApp(email) {
 
     loadDashboard();
     renderProfile(email, profile);
+
+    // Restore this SME's custom dashboard (built during signup) if one exists.
+    // This is additive — demo SMEs without a saved entry continue to use the
+    // default Meridian dashboard exactly as before.
+    try {
+        const stored = localStorage.getItem('pp_custom_sme_' + email);
+        const smeKey = localStorage.getItem('pp_custom_sme_key_' + email);
+        if (stored && smeKey && typeof SME_DATA !== 'undefined') {
+            SME_DATA[smeKey] = JSON.parse(stored);
+            setTimeout(() => loadSMEData(smeKey), 150);
+        }
+    } catch (e) { /* ignore — fall back to default */ }
 }
 
 // ══════════════════════════════════════
@@ -849,23 +865,200 @@ function setupInlineSimulator() {
             runInlineScenario();
         });
     }
+
+    const scenarioSel = document.getElementById('inline-scenario-select');
+    if (scenarioSel) {
+        scenarioSel.addEventListener('change', () => {
+            const resultEl = document.getElementById('inline-sim-result');
+            if (resultEl) resultEl.style.display = 'none';
+        });
+    }
+}
+
+/**
+ * Look up the bank-borrower node currently selected in the contagion seed
+ * dropdown. Returns the node (with current_avg_delay / current_risk /
+ * latent_profile attached by the backend) or null if nothing is selected.
+ */
+function getSelectedSeedNode() {
+    const sel = document.getElementById('contagion-seed-select');
+    if (!sel || !sel.value || !_cgGraph) return null;
+    const node = (_cgGraph.nodes || []).find(n => n.id === sel.value) || null;
+    if (!node) return null;
+    // Override backend stats with the SME_DATA we use everywhere else, so the
+    // inline simulator stays consistent with the SME / Bank dashboard views.
+    return enrichNodeWithSmeData(node);
+}
+
+/**
+ * If this contagion node corresponds to one of the hardcoded SMEs in SME_DATA,
+ * recompute current_avg_delay / contractual_terms / current_risk / latent_profile
+ * from that SME's actual suppliers — so every view tells the same story.
+ */
+function enrichNodeWithSmeData(node) {
+    if (!node || !node.label) return node;
+    const labelLower = node.label.toLowerCase();
+    const smeKey = Object.keys(SME_DATA || {}).find(k => {
+        const entry = SME_DATA[k];
+        return entry && entry.name && entry.name.toLowerCase() === labelLower;
+    });
+    if (!smeKey) return node;
+
+    const suppliers = (SME_DATA[smeKey].suppliers && SME_DATA[smeKey].suppliers.suppliers) || [];
+    if (suppliers.length === 0) return node;
+
+    const avgDelay = suppliers.reduce((acc, s) => acc + (s.current_delay || 0), 0) / suppliers.length;
+    const maxTerms = Math.max(...suppliers.map(s => s.contractual_terms || 30));
+    const excess = avgDelay - maxTerms;
+    let risk;
+    if (excess <= 0) risk = 'GREEN';
+    else if (excess <= 10) risk = 'AMBER';
+    else risk = 'RED';
+
+    // Pick a profile that drives the projection drift — based on worst severity.
+    const sevOrder = { critical: 4, warning: 3, watch: 2, normal: 1 };
+    const worst = suppliers.reduce((acc, s) => (sevOrder[s.severity] || 0) > (sevOrder[acc.severity] || 0) ? s : acc, suppliers[0]);
+    const profile =
+        worst.severity === 'critical' ? 'acute' :
+        worst.severity === 'warning' ? 'gradually_stressed' :
+        worst.severity === 'watch' ? 'seasonal' : 'healthy';
+
+    return Object.assign({}, node, {
+        current_avg_delay: Math.round(avgDelay * 10) / 10,
+        contractual_terms: maxTerms,
+        current_risk: risk,
+        latent_profile: profile,
+    });
+}
+
+/**
+ * Compute the scenario projection for a single SME, using *that* SME's
+ * current_avg_delay and contractual_terms — not the global Meridian state.
+ *
+ * Returns: { projectedDelay, projectedRisk, narrative }
+ */
+function projectScenarioForSme(scenarioType, node) {
+    const delay = node.current_avg_delay || 0;
+    const terms = node.contractual_terms || 30;
+    const profile = node.latent_profile || 'healthy';
+    const name = node.label || 'this SME';
+
+    // Profile-aware drift used by "continue trend" / "revenue drop" branches.
+    // Acute / gradually-stressed firms worsen faster than healthy ones.
+    const driftPerWeek = (
+        profile === 'acute' ? 2.5 :
+        profile === 'gradually_stressed' ? 1.2 :
+        profile === 'seasonal' ? 0.8 :
+        0.3
+    );
+
+    let projected = delay;
+    let narrative = '';
+
+    switch (scenarioType) {
+        case 'continue_trend': {
+            // 6-week drift along profile
+            projected = delay + driftPerWeek * 6;
+            narrative = `Without intervention, ${name} drifts from ${Math.round(delay)}d to ~${Math.round(projected)}d over 6 weeks (profile: ${profile}).`;
+            break;
+        }
+        case 'accelerate_payments': {
+            // Reduce delay by ~30%; floor near terms*0.4 so it stays sensible.
+            const floor = Math.max(terms * 0.4, 1);
+            projected = Math.max(floor, delay * 0.7);
+            narrative = `Accelerating payments brings ${name}'s avg delay from ${Math.round(delay)}d to ~${Math.round(projected)}d, strengthening supplier relationships.`;
+            break;
+        }
+        case 'stabilize_now': {
+            // Hold flat at current — useful for AMBER firms heading toward RED.
+            projected = delay;
+            narrative = `Stabilising now holds ${name} at ${Math.round(delay)}d but doesn't recover existing overdue balances.`;
+            break;
+        }
+        case 'revenue_drop': {
+            // 20% revenue shock: faster drift + buffer of ~+8d.
+            projected = delay + driftPerWeek * 6 * 1.5 + 8;
+            narrative = `A 20% revenue drop pushes ${name} from ${Math.round(delay)}d to ~${Math.round(projected)}d as cash buffer thins.`;
+            break;
+        }
+        default: {
+            projected = delay;
+            narrative = '';
+        }
+    }
+
+    // Risk classification mirrors the backend rule: excess vs terms.
+    const excess = projected - terms;
+    let risk;
+    if (excess <= 0) risk = 'GREEN';
+    else if (excess <= 10) risk = 'AMBER';
+    else risk = 'RED';
+
+    return {
+        projectedDelay: Math.round(projected),
+        projectedRisk: risk,
+        narrative,
+    };
+}
+
+/**
+ * Update the "Current State" card to reflect the SME currently selected in
+ * the seed dropdown. Called when the dropdown changes (so the user sees the
+ * baseline shift even before clicking Run Scenario).
+ */
+function refreshInlineSimulatorBaseline() {
+    const node = getSelectedSeedNode();
+    const crEl = document.getElementById('inline-sim-current-risk');
+    const avgEl = document.getElementById('inline-sim-current-avg');
+    if (!crEl || !avgEl) return;
+
+    if (!node) {
+        crEl.textContent = '—';
+        crEl.className = 'sim-compare-value';
+        avgEl.textContent = '—';
+        return;
+    }
+
+    const risk = node.current_risk || 'AMBER';
+    crEl.textContent = risk;
+    crEl.className = `sim-compare-value ${risk.toLowerCase()}`;
+    avgEl.textContent = Math.round(node.current_avg_delay || 0) + 'd';
+
+    // Clear any prior scenario projection so stale numbers don't linger
+    const resultEl = document.getElementById('inline-sim-result');
+    if (resultEl) resultEl.style.display = 'none';
 }
 
 function runInlineScenario() {
     const scenarioType = document.getElementById('inline-scenario-select').value;
-    const result = computeLocalScenario(scenarioType, {});
+    const node = getSelectedSeedNode();
     const resultEl = document.getElementById('inline-sim-result');
+    const summaryEl = document.getElementById('inline-sim-summary');
+
+    if (!node) {
+        // Fallback: contagion graph hasn't loaded yet — keep old behaviour.
+        const result = computeLocalScenario(scenarioType, {});
+        resultEl.style.display = 'block';
+        const supplierImpacts = result.supplier_impacts || [];
+        const scenarioEndDelays = supplierImpacts.map(s => s.scenario_end);
+        const projected = AnalysisEngine.calculateRisk(scenarioEndDelays);
+        const avg = scenarioEndDelays.length > 0
+            ? Math.round(scenarioEndDelays.reduce((a, b) => a + b, 0) / scenarioEndDelays.length)
+            : 0;
+        document.getElementById('inline-sim-current-risk').textContent = getCurrentRiskLevel();
+        document.getElementById('inline-sim-current-avg').textContent = getCurrentAvgDelay() + 'd';
+        document.getElementById('inline-sim-scenario-risk').textContent = projected;
+        document.getElementById('inline-sim-scenario-avg').textContent = avg + 'd';
+        summaryEl.textContent = result.comparison_summary || '';
+        return;
+    }
+
+    const projection = projectScenarioForSme(scenarioType, node);
+    const currentRisk = node.current_risk || 'AMBER';
+    const currentAvg = Math.round(node.current_avg_delay || 0);
+
     resultEl.style.display = 'block';
     resultEl.style.animation = 'fadeIn 0.3s ease both';
-
-    const currentRisk = getCurrentRiskLevel();
-    const currentAvg = getCurrentAvgDelay();
-    const supplierImpacts = result.supplier_impacts || [];
-    const scenarioEndDelays = supplierImpacts.map(s => s.scenario_end);
-    const projectedRisk = AnalysisEngine.calculateRisk(scenarioEndDelays);
-    const scenarioAvgDelay = scenarioEndDelays.length > 0
-        ? Math.round(scenarioEndDelays.reduce((a, b) => a + b, 0) / scenarioEndDelays.length)
-        : 0;
 
     // Current card
     const crEl = document.getElementById('inline-sim-current-risk');
@@ -875,24 +1068,23 @@ function runInlineScenario() {
 
     // Scenario card
     const srEl = document.getElementById('inline-sim-scenario-risk');
-    srEl.textContent = projectedRisk;
-    srEl.className = `sim-compare-value ${projectedRisk.toLowerCase()}`;
-    document.getElementById('inline-sim-scenario-avg').textContent = scenarioAvgDelay + 'd';
+    srEl.textContent = projection.projectedRisk;
+    srEl.className = `sim-compare-value ${projection.projectedRisk.toLowerCase()}`;
+    document.getElementById('inline-sim-scenario-avg').textContent = projection.projectedDelay + 'd';
 
     // Arrow styling
     const riskOrder = { GREEN: 0, AMBER: 1, RED: 2 };
     const arrowEl = document.getElementById('inline-sim-compare-arrow');
-    if (riskOrder[projectedRisk] > riskOrder[currentRisk]) {
+    if (riskOrder[projection.projectedRisk] > riskOrder[currentRisk]) {
         arrowEl.className = 'sim-compare-arrow deteriorating';
-    } else if (riskOrder[projectedRisk] < riskOrder[currentRisk]) {
+    } else if (riskOrder[projection.projectedRisk] < riskOrder[currentRisk]) {
         arrowEl.className = 'sim-compare-arrow improving';
     } else {
         arrowEl.className = 'sim-compare-arrow stable';
     }
     arrowEl.textContent = '→';
 
-    // Summary
-    document.getElementById('inline-sim-summary').textContent = result.comparison_summary;
+    summaryEl.textContent = projection.narrative;
 }
 
 // ══════════════════════════════════════
@@ -1461,22 +1653,31 @@ function renderTrendChart() {
     const maxLen = Math.max(...topSuppliers.map(s => s.sparkline.length));
     const labels = Array.from({ length: maxLen }, (_, i) => `W${52 - maxLen + 1 + i}`);
 
-    const lineColors = [
-        { border: '#ffab00', bg: 'rgba(255,171,0,0.08)' },
-        { border: '#ff1744', bg: 'rgba(255,23,68,0.08)' },
+    const severityColorMap = {
+        critical: { border: '#ff1744', bg: 'rgba(255,23,68,0.08)' },
+        warning:  { border: '#ffab00', bg: 'rgba(255,171,0,0.08)' },
+        watch:    { border: '#7c5cfc', bg: 'rgba(124,92,252,0.06)' },
+    };
+    const normalColorPool = [
+        { border: '#00e676', bg: 'rgba(0,230,118,0.06)' },
+        { border: '#00b0ff', bg: 'rgba(0,176,255,0.06)' },
     ];
 
-    const datasets = topSuppliers.map((s, i) => ({
-        label: s.supplier_name,
-        data: [...Array(maxLen - s.sparkline.length).fill(null), ...s.sparkline],
-        borderColor: lineColors[i].border,
-        backgroundColor: lineColors[i].bg,
-        borderWidth: 2.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.35,
-        fill: true,
-    }));
+    let normalIdx = 0;
+    const datasets = topSuppliers.map((s) => {
+        const color = severityColorMap[s.severity] || normalColorPool[normalIdx++ % normalColorPool.length];
+        return {
+            label: s.supplier_name,
+            data: [...Array(maxLen - s.sparkline.length).fill(null), ...s.sparkline],
+            borderColor: color.border,
+            backgroundColor: color.bg,
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.35,
+            fill: true,
+        };
+    });
 
     const topTerms = topSuppliers[0].contractual_terms;
     if (topTerms) {
@@ -2107,23 +2308,31 @@ function renderBankTrendChart() {
     const maxLen = Math.max(...topSuppliers.map(s => s.sparkline.length));
     const labels = Array.from({ length: maxLen }, (_, i) => `W${52 - maxLen + 1 + i}`);
 
-    const lineColors = [
-        { border: '#ff1744', bg: 'rgba(255,23,68,0.08)' },
-        { border: '#ffab00', bg: 'rgba(255,171,0,0.08)' },
-        { border: '#7c5cfc', bg: 'rgba(124,92,252,0.06)' },
+    const severityColorMap = {
+        critical: { border: '#ff1744', bg: 'rgba(255,23,68,0.08)' },
+        warning:  { border: '#ffab00', bg: 'rgba(255,171,0,0.08)' },
+        watch:    { border: '#7c5cfc', bg: 'rgba(124,92,252,0.06)' },
+    };
+    const normalColorPool = [
+        { border: '#00e676', bg: 'rgba(0,230,118,0.06)' },
+        { border: '#00b0ff', bg: 'rgba(0,176,255,0.06)' },
     ];
 
-    const datasets = topSuppliers.map((s, i) => ({
-        label: s.supplier_name,
-        data: [...Array(maxLen - s.sparkline.length).fill(null), ...s.sparkline],
-        borderColor: lineColors[i].border,
-        backgroundColor: lineColors[i].bg,
-        borderWidth: 2.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.35,
-        fill: true,
-    }));
+    let normalIdx = 0;
+    const datasets = topSuppliers.map((s) => {
+        const color = severityColorMap[s.severity] || normalColorPool[normalIdx++ % normalColorPool.length];
+        return {
+            label: s.supplier_name,
+            data: [...Array(maxLen - s.sparkline.length).fill(null), ...s.sparkline],
+            borderColor: color.border,
+            backgroundColor: color.bg,
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.35,
+            fill: true,
+        };
+    });
 
     bankTrendChart = new Chart(ctx, {
         type: 'line',
@@ -2813,9 +3022,19 @@ function renderScenarioChart(data) {
         if (f) name = f.supplier_name;
     }
 
-    // Pick scenario line color based on direction
-    const isImproving = scenario.length > 0 && baseline.length > 0 && scenario[scenario.length - 1] < baseline[baseline.length - 1];
-    const scenarioColor = isImproving ? '#00e676' : '#ff1744';
+    // Pick scenario line color based on projected risk level vs contractual terms
+    let scenarioColor = '#00e676';
+    if (scenario.length > 0) {
+        const allSuppliers = (suppliersData && suppliersData.suppliers) || FALLBACK.suppliers.suppliers;
+        const focusSupplier = allSuppliers.find(s => s.supplier_id === focusId);
+        const terms = focusSupplier ? (focusSupplier.contractual_terms || 21) : 21;
+        const endDelay = scenario[scenario.length - 1];
+        if (endDelay > terms * 1.5) {
+            scenarioColor = '#ff1744';
+        } else if (endDelay > terms) {
+            scenarioColor = '#ffab00';
+        }
+    }
 
     scenarioChart = new Chart(ctx, {
         type: 'line',
@@ -4847,6 +5066,9 @@ function mydataSaveData() {
 function setupMyDataPage() {
     mydataLoadData();
 
+    // PDF Scanner: drag-drop / click-to-upload
+    setupPdfScanner();
+
     // Step 1: Add Supplier
     const addBtn = document.getElementById('mydata-add-supplier-btn');
     if (addBtn) {
@@ -5230,6 +5452,248 @@ function mydataQuickFill(profile) {
     mydataRenderPayments();
 }
 
+// ══════════════════════════════════════
+//  PDF SCANNER — auto-extract supplier data from a PDF report
+// ══════════════════════════════════════
+
+let pdfPendingResult = null;  // last parsed payload waiting for user confirmation
+
+/**
+ * Wire up the PDF scanner UI: click-to-upload, drag-and-drop, preview, apply.
+ */
+function setupPdfScanner() {
+    const dropzone = document.getElementById('pdf-dropzone');
+    const fileInput = document.getElementById('pdf-file-input');
+    const discardBtn = document.getElementById('pdf-preview-discard');
+    const applyBtn = document.getElementById('pdf-preview-apply');
+
+    if (!dropzone || !fileInput) return;
+
+    // Click-to-upload
+    fileInput.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (f) handlePdfUpload(f);
+        // Allow re-uploading the same file later
+        fileInput.value = '';
+    });
+
+    // Drag-and-drop visual feedback + drop
+    ['dragenter', 'dragover'].forEach(evt => {
+        dropzone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('is-dragging');
+        });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+        dropzone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('is-dragging');
+        });
+    });
+    dropzone.addEventListener('drop', (e) => {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) handlePdfUpload(f);
+    });
+
+    if (discardBtn) {
+        discardBtn.addEventListener('click', () => {
+            pdfPendingResult = null;
+            const preview = document.getElementById('pdf-preview');
+            if (preview) preview.style.display = 'none';
+            pdfSetStatus('', null);
+        });
+    }
+
+    if (applyBtn) {
+        applyBtn.addEventListener('click', applyParsedPdf);
+    }
+}
+
+/**
+ * Update the inline status banner under the dropzone.
+ */
+function pdfSetStatus(text, kind) {
+    const el = document.getElementById('pdf-scanner-status');
+    if (!el) return;
+    if (!text) {
+        el.style.display = 'none';
+        el.textContent = '';
+        el.className = 'pdf-scanner-status';
+        return;
+    }
+    el.style.display = 'block';
+    el.textContent = text;
+    el.className = 'pdf-scanner-status' + (kind ? ` pdf-status-${kind}` : '');
+}
+
+/**
+ * Upload a PDF, call /api/parse-pdf, and render the preview card.
+ */
+async function handlePdfUpload(file) {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+        pdfSetStatus('That doesn’t look like a PDF. Please upload a .pdf file.', 'error');
+        return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+        pdfSetStatus('File is larger than 10 MB. Please upload a smaller report.', 'error');
+        return;
+    }
+
+    pdfSetStatus(`Scanning "${file.name}"… extracting supplier rows.`, 'loading');
+    const preview = document.getElementById('pdf-preview');
+    if (preview) preview.style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    let result;
+    try {
+        const resp = await fetch('/api/parse-pdf', { method: 'POST', body: fd });
+        const payload = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+            pdfSetStatus(payload.message || 'PDF could not be parsed. Try a cleaner export.', 'error');
+            return;
+        }
+        result = payload;
+    } catch (err) {
+        pdfSetStatus('Network error while uploading. Is the API running?', 'error');
+        return;
+    }
+
+    pdfPendingResult = result;
+    pdfRenderPreview(result);
+}
+
+/**
+ * Render the parsed payload into the preview card.
+ */
+function pdfRenderPreview(result) {
+    const preview = document.getElementById('pdf-preview');
+    const list = document.getElementById('pdf-preview-list');
+    const countEl = document.getElementById('pdf-preview-count');
+    const stratEl = document.getElementById('pdf-preview-strategy');
+    const warnWrap = document.getElementById('pdf-preview-warnings');
+    if (!preview || !list) return;
+
+    const suppliers = result.suppliers || [];
+    const payments = result.payments || [];
+    const diag = result.diagnostics || {};
+
+    if (suppliers.length === 0) {
+        const why = (diag.warnings && diag.warnings[0]) || 'No supplier rows could be detected.';
+        pdfSetStatus(why, 'error');
+        preview.style.display = 'none';
+        return;
+    }
+
+    pdfSetStatus(
+        `Parsed ${suppliers.length} suppliers, ${payments.length} payment rows.`,
+        'success'
+    );
+
+    if (countEl) countEl.textContent = String(suppliers.length);
+    if (stratEl) {
+        const stratLabel = diag.strategy === 'table'
+            ? 'Table extraction'
+            : diag.strategy === 'regex'
+                ? 'Text pattern matching'
+                : 'Best-effort fallback';
+        stratEl.textContent = `${stratLabel} · ${diag.rows_kept || 0} rows kept`;
+    }
+
+    list.innerHTML = suppliers.map(s => {
+        const supplierPayments = payments.filter(p => p.supplier_id === s.supplier_id);
+        const last = supplierPayments.length > 0 ? supplierPayments[supplierPayments.length - 1] : null;
+        const lastDelay = last ? `${last.delay}d` : '—';
+        const delayClass = last && last.delay > s.contractual_terms * 1.5
+            ? 'high'
+            : last && last.delay > s.contractual_terms
+                ? 'medium'
+                : 'low';
+        return `
+            <div class="pdf-preview-row">
+                <div class="pdf-preview-row-name">${escapeHtml(s.supplier_name)}</div>
+                <div class="pdf-preview-row-meta">
+                    <span>Terms: <strong>${s.contractual_terms}d</strong></span>
+                    <span>Avg: <strong>₹${(s.avg_invoice || 0).toLocaleString('en-IN')}</strong></span>
+                    <span>Latest delay: <strong class="pdf-delay-${delayClass}">${lastDelay}</strong></span>
+                    <span class="pdf-preview-row-count">${supplierPayments.length} weeks</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const warnings = diag.warnings || [];
+    if (warnWrap) {
+        if (warnings.length > 0) {
+            warnWrap.style.display = 'block';
+            warnWrap.innerHTML = `
+                <div class="pdf-preview-warn-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Heads up
+                </div>
+                <ul>${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>
+            `;
+        } else {
+            warnWrap.style.display = 'none';
+            warnWrap.innerHTML = '';
+        }
+    }
+
+    preview.style.display = 'block';
+}
+
+/**
+ * Apply the parsed result to the My Data state and jump to AI analysis.
+ */
+function applyParsedPdf() {
+    if (!pdfPendingResult) return;
+    const suppliers = pdfPendingResult.suppliers || [];
+    const payments = pdfPendingResult.payments || [];
+    if (suppliers.length === 0) return;
+
+    // Replace existing custom data with the parsed payload
+    mydataSuppliers = suppliers.map(s => ({
+        supplier_id: s.supplier_id,
+        supplier_name: s.supplier_name,
+        contractual_terms: s.contractual_terms,
+        avg_invoice: s.avg_invoice,
+    }));
+
+    mydataPayments = payments.map(p => ({
+        supplier_id: p.supplier_id,
+        supplier_name: p.supplier_name,
+        week: p.week,
+        delay: p.delay,
+        invoice: p.invoice,
+    }));
+    mydataPayments.sort((a, b) => a.week - b.week || a.supplier_id.localeCompare(b.supplier_id));
+
+    mydataSaveData();
+    mydataRenderSuppliers();
+    mydataRenderPayments();
+
+    // Reset preview
+    pdfPendingResult = null;
+    const preview = document.getElementById('pdf-preview');
+    if (preview) preview.style.display = 'none';
+    pdfSetStatus(
+        `Imported ${suppliers.length} suppliers and ${payments.length} payment rows. Running AI analysis…`,
+        'success'
+    );
+
+    // Jump straight to Step 3 (AI Analysis) — only if we have enough payment rows
+    if (payments.length >= 4) {
+        mydataGoToStep(3);
+    } else {
+        mydataGoToStep(2);
+    }
+}
+
+
 /**
  * Run AI analysis on custom data.
  */
@@ -5247,7 +5711,54 @@ function mydataRunAnalysis() {
 
         if (analyzing) analyzing.style.display = 'none';
         if (results) results.style.display = 'block';
+
+        // First-time SME setup: register this analysis as a custom SME entry
+        // and switch the dashboard to it so the new owner sees their own data.
+        if (sessionStorage.getItem('pp_pending_new_sme_setup') === '1') {
+            finalizeNewSmeSetup(analysisResult);
+        }
     }, 1200);
+}
+
+/**
+ * Build a SME_DATA-shaped entry from the user's My Data analysis, persist it,
+ * and switch the main dashboard to render that entry. Called only on the first
+ * Run-AI-Analysis after sign-up. Existing demo SMEs (Meridian, AlphaSteel, …)
+ * are not touched — this is purely additive.
+ */
+function finalizeNewSmeSetup(analysisResult) {
+    const session = Storage.getSession();
+    if (!session) return;
+    const email = session.email;
+    const profile = Storage.getProfile(email) || {};
+    const businessName = profile.businessName || 'Your Business';
+
+    const smeKey = 'custom_' + email.replace(/[^a-z0-9]/gi, '_');
+    const smeEntry = {
+        name: businessName,
+        suppliers: { suppliers: analysisResult.suppliers },
+    };
+
+    // Inject into the in-memory SME_DATA registry the rest of the app uses.
+    if (typeof SME_DATA !== 'undefined') {
+        SME_DATA[smeKey] = smeEntry;
+    }
+
+    // Persist so subsequent logins restore this dashboard.
+    try {
+        localStorage.setItem('pp_custom_sme_' + email, JSON.stringify(smeEntry));
+        localStorage.setItem('pp_custom_sme_key_' + email, smeKey);
+    } catch (e) { /* quota — non-fatal, in-memory entry still works for this session */ }
+
+    sessionStorage.removeItem('pp_pending_new_sme_setup');
+
+    // Hand control back to the main SME dashboard, now populated with the
+    // owner's own suppliers + delays. Small delay so users see the analysis
+    // results card briefly before the page swap.
+    setTimeout(() => {
+        loadSMEData(smeKey);
+        showPage('dashboard');
+    }, 800);
 }
 
 /**
@@ -5487,10 +5998,12 @@ function mydataRenderTrendChart(suppliers) {
     const maxLen = Math.max(...suppliersWithData.map(s => s.sparkline.length));
     const labels = Array.from({ length: maxLen }, (_, i) => `W${i + 1}`);
 
-    const lineColors = [
-        { border: '#ff1744', bg: 'rgba(255,23,68,0.08)' },
-        { border: '#ffab00', bg: 'rgba(255,171,0,0.08)' },
-        { border: '#7c5cfc', bg: 'rgba(124,92,252,0.06)' },
+    const severityColorMap = {
+        critical: { border: '#ff1744', bg: 'rgba(255,23,68,0.08)' },
+        warning:  { border: '#ffab00', bg: 'rgba(255,171,0,0.08)' },
+        watch:    { border: '#7c5cfc', bg: 'rgba(124,92,252,0.06)' },
+    };
+    const normalColorPool = [
         { border: '#00e676', bg: 'rgba(0,230,118,0.06)' },
         { border: '#00b0ff', bg: 'rgba(0,176,255,0.06)' },
     ];
@@ -5501,17 +6014,21 @@ function mydataRenderTrendChart(suppliers) {
         (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0)
     );
 
-    const datasets = sorted.slice(0, 5).map((s, i) => ({
-        label: s.supplier_name,
-        data: [...Array(maxLen - s.sparkline.length).fill(null), ...s.sparkline],
-        borderColor: lineColors[i % lineColors.length].border,
-        backgroundColor: lineColors[i % lineColors.length].bg,
-        borderWidth: 2.5,
-        pointRadius: 2,
-        pointHoverRadius: 5,
-        tension: 0.35,
-        fill: true,
-    }));
+    let normalColorIdx = 0;
+    const datasets = sorted.slice(0, 5).map((s) => {
+        const color = severityColorMap[s.severity] || normalColorPool[normalColorIdx++ % normalColorPool.length];
+        return {
+            label: s.supplier_name,
+            data: [...Array(maxLen - s.sparkline.length).fill(null), ...s.sparkline],
+            borderColor: color.border,
+            backgroundColor: color.bg,
+            borderWidth: 2.5,
+            pointRadius: 2,
+            pointHoverRadius: 5,
+            tension: 0.35,
+            fill: true,
+        };
+    });
 
     // Add contractual terms line for the worst supplier
     if (sorted[0]) {
@@ -5671,6 +6188,8 @@ async function setupContagionPage() {
     }
 
     runBtn && runBtn.addEventListener('click', runContagion);
+    seedSel.addEventListener('change', refreshInlineSimulatorBaseline);
+    refreshInlineSimulatorBaseline();
 }
 
 async function runContagion() {
