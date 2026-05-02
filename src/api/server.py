@@ -918,6 +918,57 @@ async def delete_support_message(sme_id: str):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# Custom SME Registration — lets a newly-onboarded SME be visible to the
+# Groq insights endpoint and the RM support-message endpoint.
+# ---------------------------------------------------------------------------
+
+class _RegisterSupplier(BaseModel):
+    supplier_id: Optional[str] = None
+    supplier_name: Optional[str] = None
+    current_delay: Optional[float] = 0
+    contractual_terms: Optional[int] = 21
+    severity: Optional[str] = "normal"
+    trend: Optional[str] = "stable"
+    trend_slope: Optional[float] = 0.0
+
+
+class RegisterSMEPayload(BaseModel):
+    sme_id: str
+    name: str
+    suppliers: List[_RegisterSupplier]
+
+
+@app.post("/api/sme/register")
+async def post_register_sme(body: RegisterSMEPayload):
+    """Register a newly onboarded SME so Groq insights and RM messaging work for it."""
+    from src.api.insights import _INSIGHTS_CACHE  # local import keeps module load order tidy
+
+    converted = []
+    for i, s in enumerate(body.suppliers, 1):
+        converted.append({
+            "id": s.supplier_id or f"S{i}",
+            "name": s.supplier_name or f"Supplier {i}",
+            "delay": float(s.current_delay or 0),
+            "terms": int(s.contractual_terms or 21),
+            "severity": s.severity or "normal",
+            "trend": s.trend or "stable",
+            "slope": float(s.trend_slope or 0.0),
+        })
+
+    SME_DATABASE[body.sme_id] = {
+        "name": body.name,
+        "suppliers": converted,
+    }
+
+    # Drop any stale cache entries so the next insights call regenerates with the new data
+    for k in list(_INSIGHTS_CACHE.keys()):
+        if k.startswith(f"{body.sme_id}:"):
+            _INSIGHTS_CACHE.pop(k, None)
+
+    return {"ok": True, "sme_id": body.sme_id, "supplier_count": len(converted)}
+
+
 @app.post("/api/custom/analyze")
 async def post_custom_analyze(body: CustomAnalyzeRequest):
     """

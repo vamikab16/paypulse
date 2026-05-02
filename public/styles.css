@@ -456,8 +456,20 @@ body::after {
     box-shadow: 0 4px 30px rgba(255, 171, 0, 0.1);
 }
 
+.landing-compare-highlight-green {
+    border-color: rgba(0, 230, 118, 0.2);
+    background: linear-gradient(135deg, rgba(15, 20, 40, 0.85), rgba(0, 230, 118, 0.04));
+    box-shadow: 0 0 30px rgba(0, 230, 118, 0.06);
+}
+
+.landing-compare-highlight-green:hover {
+    border-color: rgba(0, 230, 118, 0.35);
+    box-shadow: 0 4px 30px rgba(0, 230, 118, 0.1);
+}
+
 .landing-compare-icon { width: 24px; height: 24px; color: var(--text-muted); }
 .landing-compare-highlight .landing-compare-icon { color: var(--amber); }
+.landing-compare-highlight-green .landing-compare-icon { color: var(--green); }
 
 .landing-compare-label {
     font-size: 0.6rem;
@@ -2064,9 +2076,9 @@ body::after {
 .portfolio-risk-tag.green { color: var(--green); background: rgba(0, 230, 118, 0.1); border: 1px solid rgba(0, 230, 118, 0.15); }
 
 .portfolio-trend { font-size: 1rem; font-weight: 700; text-align: center; }
-.portfolio-trend.increasing { color: var(--red); }
-.portfolio-trend.stable { color: var(--text-muted); }
-.portfolio-trend.decreasing { color: var(--green); }
+.portfolio-trend.high { color: var(--red); }
+.portfolio-trend.medium { color: var(--amber); }
+.portfolio-trend.low { color: var(--green); }
 
 .portfolio-priority {
     font-size: 0.65rem;

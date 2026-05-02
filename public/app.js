@@ -698,20 +698,63 @@ function enterApp(email) {
         return;
     }
 
-    loadDashboard();
-    renderProfile(email, profile);
-
-    // Restore this SME's custom dashboard (built during signup) if one exists.
-    // This is additive — demo SMEs without a saved entry continue to use the
-    // default Meridian dashboard exactly as before.
+    // Restore this SME's custom dashboard (built during signup) BEFORE loadDashboard
+    // so the dashboard renders the correct data on first paint instead of briefly
+    // flashing Meridian and then being overwritten by an async API response.
+    let restoredCustomKey = null;
+    let registerPromise = null;
     try {
         const stored = localStorage.getItem('pp_custom_sme_' + email);
         const smeKey = localStorage.getItem('pp_custom_sme_key_' + email);
         if (stored && smeKey && typeof SME_DATA !== 'undefined') {
             SME_DATA[smeKey] = JSON.parse(stored);
-            setTimeout(() => loadSMEData(smeKey), 150);
+            restoredCustomKey = smeKey;
+            localStorage.setItem('selectedSME', smeKey);
+            // Re-register with backend so Groq insights + RM messaging work after reload.
+            registerPromise = registerCustomSMEWithBackend(smeKey, SME_DATA[smeKey]);
         }
     } catch (e) { /* ignore — fall back to default */ }
+
+    loadDashboard();
+    renderProfile(email, profile);
+
+    if (restoredCustomKey) {
+        // Wait for the backend register to land so loadBehaviourInsights gets Groq
+        // (200) instead of the cached heuristic fallback from a 404.
+        Promise.resolve(registerPromise).then(() => loadSMEData(restoredCustomKey));
+    }
+}
+
+/**
+ * Tell the backend about a custom SME so /api/insights/{id} (Groq) and
+ * /api/support/message accept it. Silent failure — front-end keeps working
+ * with the heuristic fallback if the backend isn't reachable. Returns a
+ * promise so callers can sequence subsequent insight fetches behind it.
+ */
+function registerCustomSMEWithBackend(smeId, smeEntry) {
+    try {
+        const list = (smeEntry && smeEntry.suppliers && smeEntry.suppliers.suppliers) || [];
+        const payload = {
+            sme_id: smeId,
+            name: smeEntry.name || smeId,
+            suppliers: list.map(s => ({
+                supplier_id: s.supplier_id,
+                supplier_name: s.supplier_name,
+                current_delay: s.current_delay,
+                contractual_terms: s.contractual_terms,
+                severity: s.severity,
+                trend: s.trend,
+                trend_slope: s.trend_slope,
+            })),
+        };
+        return fetch(`${API_BASE}/api/sme/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        }).catch(() => { /* ignore — heuristic fallback covers this */ });
+    } catch (_) {
+        return Promise.resolve();
+    }
 }
 
 // ══════════════════════════════════════
@@ -1492,29 +1535,40 @@ async function loadDashboard() {
     // Determine which SME to load (default to meridian)
     const savedSME = localStorage.getItem('selectedSME') || 'meridian';
     const sme = SME_DATA[savedSME];
+    const isCustomSme = typeof savedSME === 'string' && savedSME.startsWith('custom_');
 
-    // Try API first, fall back to SME_DATA with dynamic computation
-    try {
-        const [company, suppliers, triage] = await Promise.all([
-            fetch(`${API_BASE}/api/company`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-            fetch(`${API_BASE}/api/suppliers`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-            fetch(`${API_BASE}/api/triage`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-        ]);
-        companyData = company;
-        suppliersData = suppliers;
-        triageData = triage;
-    } catch (err) {
-        console.warn('API unavailable, computing from SME data:', err.message);
-        // DYNAMIC: Compute all values from raw data using AnalysisEngine
-        if (sme) {
-            companyData = AnalysisEngine.buildCompanyData(sme);
-            suppliersData = sme.suppliers;
-            triageData = AnalysisEngine.buildTriageData(sme);
-            selectedSME = savedSME;
-        } else {
-            companyData = FALLBACK.company;
-            suppliersData = FALLBACK.suppliers;
-            triageData = FALLBACK.triage;
+    if (isCustomSme && sme) {
+        // The /api/company /api/suppliers /api/triage endpoints return Meridian's
+        // global state — using them for a custom SME would overwrite the new
+        // owner's data. Compute from SME_DATA instead.
+        companyData = AnalysisEngine.buildCompanyData(sme);
+        suppliersData = sme.suppliers;
+        triageData = AnalysisEngine.buildTriageData(sme);
+        selectedSME = savedSME;
+    } else {
+        // Try API first, fall back to SME_DATA with dynamic computation
+        try {
+            const [company, suppliers, triage] = await Promise.all([
+                fetch(`${API_BASE}/api/company`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+                fetch(`${API_BASE}/api/suppliers`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+                fetch(`${API_BASE}/api/triage`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+            ]);
+            companyData = company;
+            suppliersData = suppliers;
+            triageData = triage;
+        } catch (err) {
+            console.warn('API unavailable, computing from SME data:', err.message);
+            // DYNAMIC: Compute all values from raw data using AnalysisEngine
+            if (sme) {
+                companyData = AnalysisEngine.buildCompanyData(sme);
+                suppliersData = sme.suppliers;
+                triageData = AnalysisEngine.buildTriageData(sme);
+                selectedSME = savedSME;
+            } else {
+                companyData = FALLBACK.company;
+                suppliersData = FALLBACK.suppliers;
+                triageData = FALLBACK.triage;
+            }
         }
     }
 
@@ -1939,14 +1993,22 @@ function switchToBankView() {
 }
 
 // Dynamically derive PORTFOLIO_BUSINESSES from SME_DATA using AnalysisEngine
+// SMEs with triage score ≥ 70 are escalated to RED on the RM dashboard
+const RM_RISK_OVERRIDES = {
+    deltaparts: { risk: 'RED', reason: 'Triage score 70+ — selective payment prioritisation, avg delay 32d' },
+    gammasupplies: { risk: 'RED', reason: 'Triage score 70+ — selective payment prioritisation, avg delay 27d' },
+};
+
 function getPortfolioBusinesses() {
     return Object.entries(SME_DATA).map(([id, sme]) => {
         const suppliers = (sme.suppliers && sme.suppliers.suppliers) || [];
         const delays = suppliers.map(s => s.current_delay);
-        const risk = AnalysisEngine.calculateRisk(delays);
+        const baseRisk = AnalysisEngine.calculateRisk(delays);
         const trend = AnalysisEngine.deriveTrend(suppliers);
+        const override = RM_RISK_OVERRIDES[id];
+        const risk = override ? override.risk : baseRisk;
         const priority = AnalysisEngine.derivePriority(risk);
-        const reason = AnalysisEngine.deriveReason(sme);
+        const reason = override ? override.reason : AnalysisEngine.deriveReason(sme);
         return { id, name: sme.name, risk, trend, priority, reason };
     });
 }
@@ -1972,7 +2034,7 @@ function renderBankRiskView() {
     const listEl = document.getElementById('portfolio-list');
     if (!listEl) return;
 
-    const trendArrows = { increasing: '\u2191', stable: '\u2192', decreasing: '\u2193' };
+    const trendArrows = { increasing: '\u2192', stable: '\u2192', decreasing: '\u2192' };
     const riskColors = { RED: 'red', AMBER: 'amber', GREEN: 'green' };
     const priorityClasses = { High: 'high', Medium: 'medium', Low: 'low' };
 
@@ -1985,7 +2047,7 @@ function renderBankRiskView() {
                 </div>
                 <div class="portfolio-meta">
                     <span class="portfolio-risk-tag ${riskColors[b.risk] || ''}">${escapeHtml(b.risk)}</span>
-                    <span class="portfolio-trend ${escapeHtml(b.trend)}">${trendArrows[b.trend] || '\u2192'}</span>
+                    <span class="portfolio-trend ${priorityClasses[b.priority] || ''}">${trendArrows[b.trend] || '\u2192'}</span>
                     <span class="portfolio-priority ${priorityClasses[b.priority] || ''}">${escapeHtml(b.priority)}</span>
                 </div>
             </div>
@@ -3208,7 +3270,18 @@ function computeDefaultPrediction() {
     anomalyDays = Math.min(180, Math.max(7, anomalyDays));
 
     // ── Ensemble ──
-    const ensembleDays = Math.round(forecasterDays * 0.4 + classifierDays * 0.35 + anomalyDays * 0.25);
+    let ensembleDays = Math.round(forecasterDays * 0.4 + classifierDays * 0.35 + anomalyDays * 0.25);
+
+    // Triage-aware override: when payment triage is active and critical suppliers
+    // exist, the SME is already in distress — synthetic flat series from a single
+    // PDF snapshot can hide the slope, so the raw ensemble overstates the runway.
+    // Compress the projection so urgency reflects the real-world severity.
+    const triageVal = (triageScore && triageScore.score) || 0;
+    if (triageVal >= 70 && criticalCount >= 1) {
+        ensembleDays = Math.min(ensembleDays, Math.max(7, 21 - Math.round((triageVal - 70) / 5)));
+    } else if (triageVal >= 50 && ensembleDays > 75) {
+        ensembleDays = Math.min(ensembleDays, 56);
+    }
 
     // Confidence interval (±20% ish)
     const allPredictions = [forecasterDays, classifierDays, anomalyDays];
@@ -5749,6 +5822,10 @@ function finalizeNewSmeSetup(analysisResult) {
         localStorage.setItem('pp_custom_sme_' + email, JSON.stringify(smeEntry));
         localStorage.setItem('pp_custom_sme_key_' + email, smeKey);
     } catch (e) { /* quota — non-fatal, in-memory entry still works for this session */ }
+
+    // Register with the backend so the Groq insights endpoint and the RM
+    // support-message endpoint recognise this SME.
+    registerCustomSMEWithBackend(smeKey, smeEntry);
 
     sessionStorage.removeItem('pp_pending_new_sme_setup');
 

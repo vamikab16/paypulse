@@ -177,7 +177,7 @@ def _build_user_prompt(sme_id: str, sme: Dict[str, Any]) -> str:
         excess = s["delay"] - s["terms"]
         supplier_lines.append(
             f"  - {s['name']}: delay={s['delay']}d, terms={s['terms']}d, "
-            f"excess={excess:+d}d, severity={s['severity']}, "
+            f"excess={excess:+.0f}d, severity={s['severity']}, "
             f"trend={s['trend']}, slope={s['slope']:+.1f}d/week"
         )
 
