@@ -516,7 +516,8 @@ async def get_sme_insights(sme_id: str, force_refresh: bool = False, viewer: str
     result["source"] = source
     result["viewer"] = viewer
 
-    _INSIGHTS_CACHE[cache_key] = result
+    if source == "groq":
+        _INSIGHTS_CACHE[cache_key] = result
     return result
 
 
